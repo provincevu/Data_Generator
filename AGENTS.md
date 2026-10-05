@@ -26,3 +26,6 @@ Record important project decisions so that their reasoning and context remain av
 - Before taking an action that may be affected by a previous decision, review the relevant entries in `docs/decisions.md` first. Ensure that the planned action does not unintentionally conflict with decisions made previously.
 - Also update the Vietnamese version of the decision records in `docs/decisions_vi.md` for easier reading.
 - If the planned action appears to conflict with an existing decision, do not silently override the previous decision. Review the conflict, discuss whether the decision should be changed, and update both `docs/decisions.md` and `docs/decisions_vi.md` when the decision is formally revised.
+
+### **Response requirements**
+- When responding to me, limit the use of confusing English terms (you may still use English terms if translating them into Vietnamese would result in a loss of meaning).

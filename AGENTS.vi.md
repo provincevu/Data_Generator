@@ -26,3 +26,7 @@ Ghi lại các quyết định quan trọng của dự án để lý do và bố
 - Trước khi thực hiện một hành động có thể bị ảnh hưởng bởi các quyết định trước đó, hãy xem lại các mục liên quan trong `docs/decisions.md`. Đảm bảo rằng hành động dự kiến không vô tình xung đột với các quyết định đã được đưa ra trước đây.
 - Đồng thời hãy cập nhật cả vào trong `docs/decisions_vi.md` để tôi có thể đọc một cách dễ dàng.
 - Nếu hành động dự kiến có vẻ xung đột với một quyết định hiện có, không được âm thầm ghi đè quyết định trước đó. Hãy xem xét sự xung đột, thảo luận xem quyết định đó có cần thay đổi hay không, cập nhật cả `docs/decisions.md` và `docs/decisions_vi.md` khi quyết định được chính thức sửa đổi.
+
+
+### **Các yêu cầu khi trả lời**
+- Khi trả lời tôi, hạn chế sử dụng các thuật ngữ tiếng anh gây khó hiểu (vẫn có thể sử dụng các thuật ngữ tiếng anh nếu việc dịch sang tiếng việt trở nên không sát nghĩa)
