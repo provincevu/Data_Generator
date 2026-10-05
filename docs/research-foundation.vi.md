@@ -2,7 +2,7 @@
 
 **Trạng thái:** nguồn sự thật chính thức của dự án  
 **Phạm vi:** bộ sinh lỗi/suy giảm dự đoán, bắt đầu với XJTU-SY  
-**Cập nhật hợp nhất lần cuối:** 2026-10-04
+**Cập nhật hợp nhất lần cuối:** 2026-10-05
 
 Tài liệu này ghi lại những quyết định nghiên cứu có tính lâu dài đã được thống nhất với chủ dự án. Mục đích của nó là để các công việc về sau không phụ thuộc vào lịch sử trò chuyện. Hãy cập nhật tài liệu khi một quyết định thay đổi; không được âm thầm thay thế hoặc bỏ qua các quyết định này trong code hay các thí nghiệm.
 
@@ -44,7 +44,7 @@ Q=\{\Delta t_{f1},\ldots,\Delta t_{fn}\}.
 
 1. **Đầu vào suy luận không bao gồm tỷ lệ vòng đời / phần trăm tuổi thọ.** $\tau=t/T_{failure}$ là siêu dữ liệu ngoại tuyến, chỉ dùng cho phân tích, lấy mẫu, đánh giá hoặc giám sát phụ tùy chọn. Mô hình khi triển khai phải học trạng thái hiện tại từ lịch sử.
 2. **Đầu vào thời gian là thời gian tương đối, không phải tuổi tuyệt đối của ổ bi.** Hệ thống giám sát có thể bắt đầu theo dõi một ổ bi khi nó đã hoạt động được một thời gian, do đó tuổi tuyệt đối trong huấn luyện không tương thích về ngữ nghĩa với lúc suy luận. Dùng thời gian tương đối so với mốc truy vấn cho cả lịch sử lẫn các truy vấn tương lai.
-3. **Điều kiện vận hành là ngữ cảnh vật lý, không dùng mã điều kiện làm đặc trưng chính.** Với XJTU-SY, dùng `[rotation_speed_hz, radial_load_kn]`; các môi trường sau này có thể dùng RPM, tải, mô-men xoắn, nhiệt độ, áp suất và những đại lượng vật lý liên quan.
+3. **Điều kiện vận hành là ngữ cảnh vật lý, không dùng mã điều kiện làm đặc trưng chính.** Với XJTU-SY, contract raw lưu `rotational_speed_rpm` và `radial_load_kn`; tầng đặc trưng/mô hình có thể suy ra `rotation_speed_hz`, còn các môi trường sau này có thể bổ sung mô-men xoắn, nhiệt độ, áp suất và các đại lượng vật lý liên quan.
 4. **Bắt đầu trong không gian đặc trưng, không dùng khuếch tán dạng sóng thô.** MVP xử lý từng ảnh chụp rung động thành khoảng 32–128 đặc trưng thống kê/phổ có thể diễn giải. Dạng sóng thô / STFT / CWT / bộ mã hóa học được là các nâng cấp về sau.
 5. **Chia tập đánh giá theo ổ bi (tài sản), tuyệt đối không chia ngẫu nhiên theo hàng dữ liệu.** Quỹ đạo của một ổ bi không được xuất hiện đồng thời trong tập huấn luyện và tập kiểm thử giữ lại.
 6. **Trước khi làm việc với nhiều tập dữ liệu, hãy dùng các điều kiện vận hành XJTU-SY làm miền có kiểm soát.** Thiết lập khả năng thích nghi C1+C2 → C3 trước khi thử IMS/NASA hoặc dữ liệu nhà máy.
@@ -100,26 +100,53 @@ Các đặc trưng ban đầu gồm RMS, độ lệch chuẩn, kurtosis, độ l
 
 ## Hợp đồng dữ liệu
 
-### Quan sát
+Hợp đồng raw chuẩn hóa dựa trên phần giao về mặt ngữ nghĩa của XJTU-SY và NASA IMS, không dựa trên layout file riêng của một dataset. Dataset adapter có thể suy ra field từ tên file, metadata của experiment hoặc mapping channel. Một record chuẩn hóa đại diện cho **một vòng bi × một lần đo × một channel**, không nhất thiết là một file nguồn.
+
+### Observation raw chuẩn (đã quyết định 2026-10-05)
 
 ```text
 Observation {
-  asset_id,
-  timestamp,
-  features[D],
-  condition[C]
+  dataset_name: string,
+  experiment_id: string,
+  bearing_id: string,
+  measurement_index: integer,
+  elapsed_time_sec: float,
+
+  rotational_speed_rpm: float,
+  radial_load_kn: float,
+
+  channel_id: string,
+  channel_direction: enum(horizontal, vertical, unknown),
+  sampling_rate_hz: float,
+  signal_length: integer,
+  vibration_signal: float32[]
 }
 ```
 
-Siêu dữ liệu tập dữ liệu còn mang `condition_id`, tốc độ quay, tải hướng kính, chỉ số phép đo, thời gian đã trôi qua, thời điểm hỏng, tỷ lệ vòng đời và loại lỗi nếu có.
+`experiment_id` phân biệt operating condition của XJTU-SY hoặc test của IMS. `measurement_index` là thứ tự thời gian đã chuẩn hóa, bất kể nguồn dùng số file hay timestamp. Tốc độ và tải là metadata cấp experiment, được adapter gắn vào và chuẩn hóa về RPM và kN. `signal_length` phải bằng `len(vibration_signal)` và được giữ lại để kiểm tra. Adapter có thể tách file nhiều channel thành nhiều observation.
+
+`relative_time_sec` cố ý không nằm trong raw observation: nó được tính riêng cho từng task bằng `elapsed_time_sec - anchor_elapsed_time_sec`. Các field chỉ có ở nguồn như `source_timestamp`, `source_file`, `sensor_id` và `signal_unit` không thuộc contract lõi liên dataset; có thể giữ trong metadata riêng của nguồn. Failure time, lifecycle fraction, fault type và health label thuộc metadata/evaluation offline, không thuộc observation inference chính.
 
 ### Tác vụ quỹ đạo
 
 ```text
 TrajectoryTask {
-  history: [{features, relative_time, condition}, ...],
-  future_queries: [positive relative times],
-  future_targets: [feature vectors aligned with queries]
+  asset_id: string,
+  history: [
+    {
+      observation_id: string,
+      features: float32[],
+      relative_time_sec: float,
+      condition: {
+        rotational_speed_rpm: float,
+        radial_load_kn: float
+      }
+    },
+    ...
+  ],
+  future_queries_sec: float[],
+  future_targets: float32[][],
+  anchor_elapsed_time_sec: float
 }
 ```
 
@@ -224,3 +251,4 @@ Mỗi mô hình được đăng ký phải gắn với `model_version`, `dataset
 | 2026-10-04 | Dùng thời gian tương đối làm tín hiệu thời gian chính. | Tránh sai khác ngữ nghĩa giữa huấn luyện và suy luận về tuổi quan sát. |
 | 2026-10-04 | Xem điều kiện XJTU là các miền có kiểm soát trước khi dùng tập dữ liệu bên ngoài. | Cho phép thu thập bằng chứng thích nghi có kiểm soát và đáng tin cậy. |
 | 2026-10-04 | Bắt đầu với sinh dữ liệu trong không gian đặc trưng. | Giúp MVP dễ gỡ lỗi và phù hợp với năng lực tính toán hiện có. |
+| 2026-10-05 | Chấp nhận contract `Observation` raw chuẩn hóa nêu trên. | Cung cấp một đơn vị nạp dữ liệu không mất mát, độc lập dataset cho XJTU-SY và IMS, đồng thời tách thời gian tương đối của task khỏi nhãn offline. |

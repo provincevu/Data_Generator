@@ -2,7 +2,7 @@
 
 **Status:** project source of truth  
 **Scope:** predictive-fault/degradation generator, beginning with XJTU-SY  
-**Last consolidated:** 2026-10-04
+**Last consolidated:** 2026-10-05
 
 This document records the durable research decisions agreed with the project owner. It exists so that later work does not depend on chat history. Update it when a decision changes; do not quietly supersede it in code or experiments.
 
@@ -44,7 +44,7 @@ Q=\{\Delta t_{f1},\ldots,\Delta t_{fn}\}.
 
 1. **Inference does not receive lifecycle fraction / percent lifetime.**  \(\tau=t/T_{failure}\) is offline metadata used only for analysis, sampling, evaluation, or optional auxiliary supervision. The deployed model learns the current state from history.
 2. **Time input is relative, not absolute bearing age.** A monitoring system may begin observing a bearing late in life, so absolute training age has a semantic mismatch with inference. Use time relative to the query anchor for both history and future queries.
-3. **Operating condition is physical context, not a condition ID as the main feature.** For XJTU-SY use `[rotation_speed_hz, radial_load_kn]`; later environments can use RPM, load, torque, temperature, pressure, and related physical variables.
+3. **Operating condition is physical context, not a condition ID as the main feature.** For XJTU-SY the raw contract stores `rotational_speed_rpm` and `radial_load_kn`; the feature/model layer may derive `rotation_speed_hz`, while later environments can add load, torque, temperature, pressure, and related physical variables.
 4. **Start in feature space, not raw-waveform diffusion.** The MVP processes each vibration snapshot into roughly 32–128 interpretable statistical/spectral features. Raw waveform / STFT / CWT / learned encoders are later upgrades.
 5. **Evaluation splits are by bearing (asset), never random rows.** A trajectory from a bearing must not be represented in both train and held-out test.
 6. **Use XJTU-SY operating conditions as controlled domains before cross-dataset work.** Establish C1+C2 → C3 adaptation before trying IMS/NASA or factory data.
@@ -100,26 +100,53 @@ Initial features include RMS, standard deviation, kurtosis, skewness, peak, cres
 
 ## Data contracts
 
-### Observation
+The canonical raw contract is deliberately based on the semantic intersection of XJTU-SY and NASA IMS, rather than on either dataset's file layout. A dataset adapter may derive fields from file names, experiment metadata, or channel mappings. One normalized record represents **one bearing × one measurement × one channel**, not necessarily one source file.
+
+### Canonical raw observation (decided 2026-10-05)
 
 ```text
 Observation {
-  asset_id,
-  timestamp,
-  features[D],
-  condition[C]
+  dataset_name: string,
+  experiment_id: string,
+  bearing_id: string,
+  measurement_index: integer,
+  elapsed_time_sec: float,
+
+  rotational_speed_rpm: float,
+  radial_load_kn: float,
+
+  channel_id: string,
+  channel_direction: enum(horizontal, vertical, unknown),
+  sampling_rate_hz: float,
+  signal_length: integer,
+  vibration_signal: float32[]
 }
 ```
 
-Dataset metadata additionally carries `condition_id`, rotation speed, radial load, measurement index, elapsed time, failure time, lifecycle fraction, and fault type where available.
+`experiment_id` distinguishes an XJTU-SY operating condition or an IMS test. `measurement_index` is the normalized chronological order, regardless of whether the source uses numbered files or timestamps. Operating speed and load are experiment-level metadata attached by the adapter and normalized to RPM and kN. `signal_length` must equal `len(vibration_signal)` and is retained for validation. The adapter may split multi-channel source files into multiple observations.
+
+`relative_time_sec` is intentionally not a raw observation field: it is computed per task as `elapsed_time_sec - anchor_elapsed_time_sec`. Source-only fields such as `source_timestamp`, `source_file`, `sensor_id`, and `signal_unit` are not part of the cross-dataset core contract; they may be retained in source-specific metadata. Failure time, lifecycle fraction, fault type, and health labels belong to offline metadata/evaluation, never the main inference observation.
 
 ### Trajectory task
 
 ```text
 TrajectoryTask {
-  history: [{features, relative_time, condition}, ...],
-  future_queries: [positive relative times],
-  future_targets: [feature vectors aligned with queries]
+  asset_id: string,
+  history: [
+    {
+      observation_id: string,
+      features: float32[],
+      relative_time_sec: float,
+      condition: {
+        rotational_speed_rpm: float,
+        radial_load_kn: float
+      }
+    },
+    ...
+  ],
+  future_queries_sec: float[],
+  future_targets: float32[][],
+  anchor_elapsed_time_sec: float
 }
 ```
 
@@ -224,4 +251,5 @@ Every registered model must be associated with `model_version`, `dataset_version
 | 2026-10-04 | Use relative time as the primary temporal signal. | Avoids training/inference semantic mismatch in observed age. |
 | 2026-10-04 | Treat XJTU conditions as controlled domains before external datasets. | Enables credible, controlled adaptation evidence. |
 | 2026-10-04 | Begin with feature-space generation. | Keeps the MVP debug-friendly and feasible on available compute. |
+| 2026-10-05 | Adopt the canonical raw `Observation` contract defined above. | Provides one lossless, dataset-agnostic ingestion unit for XJTU-SY and IMS while keeping task-relative time and offline labels separate. |
 
