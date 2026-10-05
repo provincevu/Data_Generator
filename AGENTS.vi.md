@@ -24,4 +24,5 @@ Ghi lại các quyết định quan trọng của dự án để lý do và bố
 - Nếu một quyết định có vẻ không hợp lý, đã lỗi thời hoặc không còn phù hợp với nhu cầu hiện tại của dự án, hãy thảo luận và xem xét lại trước khi thay đổi bản ghi quyết định lâu dài.
 - Ghi lại các quyết định của dự án vào `docs/decisions.md`.
 - Trước khi thực hiện một hành động có thể bị ảnh hưởng bởi các quyết định trước đó, hãy xem lại các mục liên quan trong `docs/decisions.md`. Đảm bảo rằng hành động dự kiến không vô tình xung đột với các quyết định đã được đưa ra trước đây.
-- Nếu hành động dự kiến có vẻ xung đột với một quyết định hiện có, không được âm thầm ghi đè quyết định trước đó. Hãy xem xét sự xung đột, thảo luận xem quyết định đó có cần thay đổi hay không, và cập nhật `docs/decisions.md` khi quyết định được chính thức sửa đổi.
+- Đồng thời hãy cập nhật cả vào trong `docs/decisions_vi.md` để tôi có thể đọc một cách dễ dàng.
+- Nếu hành động dự kiến có vẻ xung đột với một quyết định hiện có, không được âm thầm ghi đè quyết định trước đó. Hãy xem xét sự xung đột, thảo luận xem quyết định đó có cần thay đổi hay không, cập nhật cả `docs/decisions.md` và `docs/decisions_vi.md` khi quyết định được chính thức sửa đổi.
