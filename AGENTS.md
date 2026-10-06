@@ -28,4 +28,4 @@ Record important project decisions so that their reasoning and context remain av
 - If the planned action appears to conflict with an existing decision, do not silently override the previous decision. Review the conflict, discuss whether the decision should be changed, and update both `docs/decisions.md` and `docs/decisions_vi.md` when the decision is formally revised.
 
 ### **Response requirements**
-- When responding to me, limit the use of confusing English terms (you may still use English terms if translating them into Vietnamese would result in a loss of meaning).
+- When responding to me, limit the use of confusing English terms (you may still use English terms if translating them into Vietnamese would result in a loss of meaning). For me, a good conversation is one where both parties understand each other's intent.

@@ -63,3 +63,34 @@ Observation {
 - Archive inspection disproves the assumed channel mapping or operating metadata.
 - A future modeling requirement needs a different atomic unit (for example, multi-channel observations as one tensor) and the conversion remains lossless.
 - The project formally expands beyond vibration bearing datasets; then version the contract rather than silently changing it.
+
+## IMPORTANT — Define experiment protocol for causal XJTU forecasting
+
+**Decision:** Use a causal, bearing-grouped protocol for initial XJTU-SY forecasting and fault generation. XJTU-SY is the current development dataset; IMS is deferred to a separate cross-dataset evaluation. The model receives recent sensor history and predicts a variable-length future sequence until failure, without condition metadata or absolute lifecycle age.
+
+**Date:** 2026-10-07
+
+**Problem addressed:** Random snapshot/window splits, absolute lifecycle time, total trajectory length, failure time, and laboratory condition identifiers can let the model exploit bearing identity or experimental structure instead of learning future signal behavior. Real operation may have changing conditions, irregular observations, and large bearing-to-bearing lifetime variation.
+
+**Current system state:** The raw Observation contract is fixed. XJTU-SY evaluates generalization between physical bearing instances and between conditions. All XJTU bearings share one nominal model, so this is not transfer between bearing models.
+
+**Business/project requirements:** Use recent sensor history; support irregular observations without interpolating missing waveforms; support configurable horizons and full rollout until failure; predict future sensor signals, relative future offsets, time-local fault state, and per-record confidence; separate bearing-instance from condition generalization; preserve a later XJTU-to-IMS evaluation.
+
+**Protocol:**
+
+1. At anchor t, use at most 20 valid records within the previous 30 minutes (max_records = 20; max_lookback = 1800 seconds). Each record contains sensor signal, relative lag_from_now, and masks for padding or unavailable channels/records. Same-timestamp horizontal and vertical signals are channels of one measurement. The main protocol requires at least 10 records; contexts of 1–9 are a separate robustness evaluation. Do not interpolate missing records or waveforms.
+2. Exclude condition metadata, dataset_name, experiment_id, bearing_id, file/path identifiers, absolute start time, total operating age, measurement_index, total trajectory length, remaining life, and true failure time. Speed/load remain in raw data for provenance but are excluded from baseline input. Learned preprocessing is fit on train only.
+3. Predict a variable-length sequence of future records. Each contains future sensor signal, relative future offset, time-local fault_state, and confidence. End with failure_event = 1 or END_OF_TRAJECTORY. A finite requested horizon is a truncated rollout. Keep terminal_fault_type as a trajectory-level target separate from fault_state because XJTU lacks reliable timestamp-level fault labels.
+4. For each anchor, future observations are chronological from after t through the observed failure; future observations are never inputs. Final fault metadata may supervise targets but may not be input. Confidence is part of the interface; its loss and calibration are deferred to model design.
+5. Use two XJTU tracks: unseen bearing within the same condition, with grouped leave-one-bearing-out and inner grouped validation; and unseen condition, with leave-one-condition-out, all five bearings of one condition in test, validation only from source conditions, and rotation across all three conditions. Split complete bearing trajectories before windows/features/synthetic records; never random-split overlapping windows. Synthetic data cannot use validation/test trajectories for training.
+6. Report by bearing, condition, fault state/type, history length, and horizon. Include persistence and simple autoregressive baselines, leakage canaries, and duplicate/near-duplicate checks. XJTU-to-IMS is a separate zero-shot experiment unless adaptation is declared.
+
+**Alternatives considered:** Random snapshot/window splits, condition metadata, absolute lifecycle variables, unlimited history, missing-waveform interpolation, fixed-length output, and treating terminal fault type as a timestamp-level label were rejected for leakage, deployment mismatch, fabricated content, or ambiguous supervision.
+
+**Rationale:** Bearing-grouped splits prevent identity and temporal-neighbor leakage. Bounded recent history with relative lags matches causal deployment. The two XJTU tracks isolate instance variation from condition variation before external domain shift. A termination event makes full-to-failure prediction well-defined while retaining finite-horizon queries. Separating fault_state from terminal_fault_type distinguishes time-local state from eventual failure mechanism.
+
+**Evidence and assumptions:** XJTU-SY documents 15 run-to-failure bearings under three conditions, five per condition, using a common nominal model: <https://github.com/WangBiaoXJTU/xjtu-sy-bearing-datasets> and <https://www.researchgate.net/profile/Biao-Wang-27/publication/338596319_XJTU-SY_Bearing_Datasets/data/5eb689ee299bf1287f77f443/Introduction-to-XJTU-SY-Bearing-Dataset-NEW.pdf>. Observations are approximately one minute apart; fault metadata are trajectory-level final information unless a documented timestamp-level labeling procedure is introduced.
+
+**Consequences:** Leakage boundaries and evaluation scopes are explicit; irregular history, configurable horizons, within-condition generalization, and unseen-condition evaluation are supported. Grouped manifests, inner validation, masks, termination handling, and per-bearing aggregation are required. Architecture and confidence loss remain downstream decisions.
+
+**Reconsideration conditions:** Reliable deployment condition metadata becomes available; validation shows the 30-minute/20-record context is unrepresentative; a validated timestamp-level labeling procedure changes fault_state; or a new dataset/bearing model requires a separately versioned transfer protocol.

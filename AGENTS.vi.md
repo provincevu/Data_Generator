@@ -29,4 +29,4 @@ Ghi lại các quyết định quan trọng của dự án để lý do và bố
 
 
 ### **Các yêu cầu khi trả lời**
-- Khi trả lời tôi, hạn chế sử dụng các thuật ngữ tiếng anh gây khó hiểu (vẫn có thể sử dụng các thuật ngữ tiếng anh nếu việc dịch sang tiếng việt trở nên không sát nghĩa)
+- Khi trả lời tôi, hạn chế sử dụng các thuật ngữ tiếng anh gây khó hiểu (vẫn có thể sử dụng các thuật ngữ tiếng anh nếu việc dịch sang tiếng việt trở nên không sát nghĩa). Đối với tôi, một cuộc hội thoại tốt là cuộc hội thoại mà cả 2 bên đều hiểu ý của nhau

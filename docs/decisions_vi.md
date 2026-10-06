@@ -63,3 +63,35 @@ Observation {
 - Việc kiểm tra tệp lưu trữ cho thấy giả định về ánh xạ kênh hoặc metadata vận hành là không đúng.
 - Yêu cầu mô hình trong tương lai cần một đơn vị dữ liệu nguyên tử khác (ví dụ: observation đa kênh dưới dạng một tensor) và việc chuyển đổi vẫn bảo toàn dữ liệu.
 - Dự án chính thức mở rộng ra ngoài các bộ dữ liệu vòng bi rung; khi đó cần phiên bản hóa hợp đồng thay vì âm thầm thay đổi nó.
+
+
+## IMPORTANT — Define experiment protocol nhân quả cho bài toán dự báo XJTU
+
+**Quyết định:** Dùng protocol nhân quả, chia nhóm theo bearing cho giai đoạn dự báo và fault generation ban đầu trên XJTU-SY. XJTU-SY là bộ dữ liệu hiện tại; IMS để dành cho đánh giá cross-dataset riêng. Model nhận lịch sử sensor gần đây và dự đoán chuỗi tương lai có độ dài thay đổi tới khi hỏng, không nhận condition metadata hoặc tuổi vòng đời tuyệt đối.
+
+**Ngày:** 2026-10-07
+
+**Vấn đề được giải quyết:** Chia snapshot/window ngẫu nhiên, thời gian vòng đời tuyệt đối, tổng độ dài trajectory, thời điểm hỏng và condition ID phòng thí nghiệm có thể khiến model học shortcut từ identity bearing hoặc cấu trúc thí nghiệm thay vì học hành vi tín hiệu tương lai. Vận hành thực tế có thể có condition thay đổi, quan sát không đều và tuổi thọ giữa các bearing khác nhau lớn.
+
+**Trạng thái hệ thống hiện tại:** Hợp đồng Observation thô đã cố định. XJTU-SY được dùng để đánh giá tổng quát hóa giữa bearing instance và giữa condition. Tất cả bearing XJTU cùng nominal model, nên đây chưa phải chuyển giữa các model bearing.
+
+**Yêu cầu nghiệp vụ/dự án:** Dùng lịch sử sensor gần đây; hỗ trợ quan sát không đều mà không nội suy waveform thiếu; hỗ trợ horizon cấu hình và rollout tới failure; dự đoán sensor tương lai, lag tương đối, fault state tại từng thời điểm và confidence; tách tổng quát hóa giữa bearing instance khỏi condition; giữ riêng đánh giá XJTU → IMS.
+
+**Protocol:**
+
+1. Tại anchor t, dùng tối đa 20 bản ghi hợp lệ trong 30 phút trước đó (max_records = 20; max_lookback = 1800 giây). Mỗi bản ghi gồm tín hiệu sensor, lag_from_now và mask cho padding hoặc channel/bản ghi không có. Horizontal và vertical cùng timestamp là các kênh của một lần đo. Protocol chính yêu cầu tối thiểu 10 bản ghi; context 1–9 được đánh giá robustness riêng. Không nội suy dữ liệu thiếu.
+2. Loại condition metadata, dataset_name, experiment_id, bearing_id, tên/đường dẫn file, thời gian bắt đầu tuyệt đối, tổng tuổi vận hành, measurement_index, tổng độ dài trajectory, remaining life và thời điểm hỏng thật khỏi input. Speed/load giữ trong dữ liệu thô để truy xuất nhưng loại khỏi baseline input. Preprocessing học được chỉ fit trên train.
+3. Output là chuỗi bản ghi tương lai có độ dài thay đổi. Mỗi bản ghi gồm tín hiệu sensor tương lai, khoảng cách thời gian tương lai, fault_state tại thời điểm đó và confidence. Kết thúc bằng failure_event = 1 hoặc END_OF_TRAJECTORY. Horizon hữu hạn được hỗ trợ như rollout bị cắt. terminal_fault_type là target cấp trajectory, tách khỏi fault_state vì XJTU không có nhãn fault type đáng tin cậy cho từng timestamp.
+4. Với mỗi anchor, lấy observation tương lai theo thứ tự đến bản ghi failure; observation tương lai không bao giờ là input. Final fault metadata có thể dùng supervision nhưng không được làm input. Confidence là một phần interface; loss và calibration để ở bước thiết kế model.
+5. XJTU có hai track: unseen bearing trong cùng condition, grouped leave-one-bearing-out với inner grouped validation; và unseen condition, leave-one-condition-out, giữ cả năm bearing của một condition làm test, validation chỉ từ condition nguồn và xoay condition test qua cả ba condition. Chia toàn bộ trajectory trước khi tạo window/feature/synthetic record; cấm random split window chồng lấn. Không lấy trajectory validation/test để tạo synthetic cho train.
+6. Báo cáo theo bearing, condition, fault state/type, độ dài history và forecast horizon; có persistence, autoregressive baseline, canary leakage và kiểm tra window trùng/gần trùng. XJTU → IMS là zero-shot transfer riêng trừ khi adaptation được khai báo.
+
+**Các phương án đã cân nhắc:** Chia snapshot/window ngẫu nhiên, condition metadata, biến thời gian vòng đời tuyệt đối, history không giới hạn, nội suy waveform thiếu, output độ dài cố định và dùng terminal fault type làm nhãn timestamp-level đều bị loại vì leakage, không phù hợp triển khai, tạo tín hiệu giả hoặc gây supervision mơ hồ.
+
+**Lập luận:** Chia theo bearing ngăn leakage từ identity và snapshot lân cận. History giới hạn với lag tương đối phù hợp triển khai nhân quả. Hai track XJTU tách biến thiên bearing instance khỏi condition trước khi đưa domain shift bên ngoài. Termination event làm rõ dự báo tới khi hỏng nhưng vẫn giữ horizon hữu hạn. Tách fault_state khỏi terminal_fault_type phân biệt trạng thái tại thời điểm với cơ chế hỏng cuối cùng.
+
+**Bằng chứng và giả định:** XJTU-SY mô tả 15 bearing chạy đến hỏng trong ba condition, năm bearing mỗi condition và cùng nominal model: <https://github.com/WangBiaoXJTU/xjtu-sy-bearing-datasets> và <https://www.researchgate.net/profile/Biao-Wang-27/publication/338596319_XJTU-SY_Bearing_Datasets/data/5eb689ee299bf1287f77f443/Introduction-to-XJTU-SY-Bearing-Dataset-NEW.pdf>. Observation xấp xỉ mỗi phút; fault metadata được xem là thông tin fault cuối trajectory trừ khi có quy trình gán nhãn theo timestamp được tài liệu hóa.
+
+**Hệ quả:** Ranh giới leakage và phạm vi đánh giá rõ ràng; hỗ trợ history không đều, horizon cấu hình, tổng quát hóa cùng condition và condition chưa thấy. Protocol cần grouped manifest, inner validation, mask, termination và tổng hợp theo bearing. Không quy định kiến trúc neural hoặc confidence loss.
+
+**Điều kiện xem xét lại:** Condition metadata đáng tin cậy luôn có sẵn; validation cho thấy cửa sổ 30 phút/20 record không đại diện; có quy trình gán nhãn fault theo timestamp được kiểm chứng làm thay đổi fault_state; hoặc dataset/model bearing mới cần protocol transfer phiên bản hóa riêng.
