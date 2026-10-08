@@ -191,3 +191,17 @@ Observation {
 **Consequences:** FFT outputs are directly comparable when sampling rates match, but spectra from different lengths have different frequency resolutions and should be compared using their recorded frequency grids or an explicitly documented interpolation for plotting. The output is larger than a scalar-only summary. The initial implementation uses fixed bands 0–1 kHz, 1–5 kHz, 5–10 kHz, and 10–12.8 kHz for the documented 25.6 kHz sampling rate.
 
 **Reconsideration conditions:** A downstream method requires a different amplitude calibration, window, detrending policy, spectral density estimate, frequency grid, or sampling-rate normalization; or the project adopts full per-measurement spectral storage.
+
+## IMPORTANT — Define XJTU-SY time-domain statistics
+
+**Decision:** Store std = sqrt(E[(x - mean)^2]), raw Pearson kurtosis E[(x - mean)^4] / std^4, and crest_factor = peak_abs / RMS for every Observation and channel in the EDA signal summary. Use population moments over the samples within one waveform; return undefined kurtosis or crest factor as NaN when the variance or RMS is zero.
+
+**Date:** 2026-10-08
+
+**Problem addressed:** The EDA needs explicit, reproducible definitions for three waveform statistics that will later be displayed in lifecycle animations and used for comparisons.
+
+**Rationale:** The requested kurtosis is the raw standardized fourth central moment, not SciPy's excess kurtosis. Population moments match the expectation notation and avoid silently subtracting 3 or using a sample correction. Crest factor captures impulsiveness relative to the waveform's RMS.
+
+**Consequences:** Existing xjtu_signal_summary.parquet must be regenerated after implementation changes. Downstream users must not interpret kurtosis as excess kurtosis.
+
+**Reconsideration conditions:** A later analysis explicitly requires unbiased sample estimators or excess kurtosis; then introduce a separately named field rather than changing this field silently.

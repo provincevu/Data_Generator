@@ -192,3 +192,17 @@ Observation {
 **Hệ quả:** Các output FFT có thể so sánh trực tiếp khi tần số lấy mẫu giống nhau, nhưng các waveform khác độ dài có độ phân giải tần số khác nhau và phải dùng lưới tần số đã lưu hoặc nội suy có ghi rõ khi vẽ. Output lớn hơn bản chỉ lưu vài số vô hướng. Mã ban đầu dùng các dải cố định 0–1 kHz, 1–5 kHz, 5–10 kHz và 10–12,8 kHz cho tần số lấy mẫu được tài liệu hóa là 25,6 kHz.
 
 **Điều kiện xem xét lại:** Phương pháp phía sau yêu cầu chuẩn hóa biên độ, cửa sổ, detrend, ước lượng mật độ phổ, lưới tần số hoặc chuẩn hóa theo tần số lấy mẫu khác; hoặc dự án chuyển sang lưu phổ cho mọi measurement.
+
+## IMPORTANT — Chốt các thống kê miền thời gian XJTU-SY
+
+**Quyết định:** Lưu std = sqrt(E[(x - mean)^2]), kurtosis Pearson raw E[(x - mean)^4] / std^4, và crest_factor = peak_abs / RMS cho mỗi Observation và mỗi kênh trong bảng thống kê EDA. Dùng moment theo toàn bộ mẫu trong một waveform; trả về kurtosis hoặc crest factor là NaN khi phương sai hoặc RMS bằng 0.
+
+**Ngày:** 2026-10-08
+
+**Vấn đề được giải quyết:** EDA cần định nghĩa rõ và tái lập được cho ba thống kê waveform sẽ được hiển thị trong animation lifecycle và dùng để so sánh.
+
+**Lập luận:** Kurtosis được yêu cầu là moment trung tâm bậc bốn đã chuẩn hóa, không phải excess kurtosis của SciPy. Moment theo toàn bộ mẫu phù hợp với ký hiệu kỳ vọng và tránh âm thầm trừ 3 hoặc hiệu chỉnh mẫu. Crest factor thể hiện tính xung của tín hiệu so với RMS.
+
+**Hệ quả:** Phải tạo lại xjtu_signal_summary.parquet sau khi thay đổi mã. Người dùng sau này không được hiểu kurtosis là excess kurtosis.
+
+**Điều kiện xem xét lại:** Phân tích sau này yêu cầu ước lượng không chệch cho mẫu hoặc excess kurtosis; khi đó phải thêm trường có tên riêng thay vì âm thầm đổi nghĩa trường hiện tại.

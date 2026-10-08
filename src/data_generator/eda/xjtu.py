@@ -12,7 +12,6 @@ from typing import Any
 import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
-from scipy.stats import kurtosis
 
 from ..ingestion.xjtu import DATASET_NAME
 
@@ -76,14 +75,26 @@ def _load_anchor_targets(path: Path) -> tuple[dict[tuple[str, str, str], dict[in
 
 
 def _signal_metrics(signal: np.ndarray) -> dict[str, float]:
+    """Compute waveform statistics using population moments over one snapshot."""
     values = np.asarray(signal, dtype=np.float64)
-    std = float(np.std(values, ddof=1)) if values.size > 1 else 0.0
+    mean = float(np.mean(values))
+    centered = values - mean
+    variance = float(np.mean(np.square(centered)))
+    std = float(np.sqrt(variance))
     rms = float(np.sqrt(np.mean(np.square(values))))
     peak_abs = float(np.max(np.abs(values)))
+    kurtosis_value = (
+        float(np.mean(np.power(centered, 4)) / (variance**2))
+        if values.size > 3 and variance > 0.0
+        else float("nan")
+    )
     return {
-        "mean": float(np.mean(values)), "std": std, "rms": rms, "peak_abs": peak_abs,
+        "mean": mean,
+        "std": std,
+        "rms": rms,
+        "peak_abs": peak_abs,
         "peak_to_peak": float(np.ptp(values)),
-        "kurtosis": float(kurtosis(values, fisher=True, bias=False)) if values.size > 3 and std > 0 else float("nan"),
+        "kurtosis": kurtosis_value,
         "crest_factor": peak_abs / rms if rms > 0 else float("nan"),
     }
 
@@ -241,7 +252,7 @@ def run_xjtu_eda(observations_path: str | Path, manifest_path: str | Path, traje
     report = {
         "schema_version": "1.0", "dataset_name": DATASET_NAME, "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "inputs": {"observations": str(observations_path), "manifest": str(manifest_path), "trajectory_metadata": str(trajectory_metadata_path)},
-        "configuration": {"anchor_fractions": list(ANCHOR_FRACTIONS), "fft_preprocessing": "subtract waveform mean", "fft_window": "Hann", "spectral_bands_hz": [list(band) for band in SPECTRAL_BANDS_HZ], "time_summary_scope": "all observations and channels", "fft_scope": "selected observations and channels at 11 normalized anchors"},
+        "configuration": {"anchor_fractions": list(ANCHOR_FRACTIONS), "fft_preprocessing": "subtract waveform mean", "fft_window": "Hann", "spectral_bands_hz": [list(band) for band in SPECTRAL_BANDS_HZ], "time_domain_metrics": {"std": "sqrt(E[(x - mean)^2])", "kurtosis": "E[(x - mean)^4] / std^4", "crest_factor": "peak_abs / rms"}, "time_summary_scope": "all observations and channels", "fft_scope": "selected observations and channels at 11 normalized anchors"},
         "summary": {"observation_summary_rows": time_count, "fft_summary_rows": fft_count, "trajectory_count": len(trajectory_counts), "plot_count": len(plots)},
         "anchor_selection": anchor_report,
         "output_files": ["xjtu_signal_summary.parquet", "xjtu_fft_summary.parquet", "xjtu_eda_report.json"], "plot_files": plots,

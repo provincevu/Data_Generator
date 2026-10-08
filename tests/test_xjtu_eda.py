@@ -55,3 +55,11 @@ def test_xjtu_eda_writes_time_summary_and_eleven_fft_anchors(tmp_path):
     assert all(len(row["frequencies_hz"]) == 17 for row in fft_rows)
     saved_report = json.loads((interim / "xjtu_eda_report.json").read_text(encoding="utf-8"))
     assert saved_report["configuration"]["fft_window"] == "Hann"
+
+def test_signal_metric_definitions_match_project_contract():
+    from data_generator.eda.xjtu import _signal_metrics
+
+    metrics = _signal_metrics(np.array([-1.0, 0.0, 1.0, 0.0]))
+    assert np.isclose(metrics["std"], np.sqrt(0.5))
+    assert np.isclose(metrics["kurtosis"], 2.0)
+    assert np.isclose(metrics["crest_factor"], np.sqrt(2.0))
