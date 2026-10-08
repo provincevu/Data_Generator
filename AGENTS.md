@@ -29,3 +29,40 @@ Record important project decisions so that their reasoning and context remain av
 
 ### **Response requirements**
 - When responding to me, limit the use of confusing English terms (you may still use English terms if translating them into Vietnamese would result in a loss of meaning). For me, a good conversation is one where both parties understand each other's intent.
+### **XJTU-SY dataset instructions and durable context**
+
+Before performing any task that reads, transforms, labels, analyzes, splits, or models XJTU-SY data, the Agent must read:
+
+- `data/raw/XJTU-SY_Bearing_Datasets/Data/XJTU-SY_Bearing_Datasets/Introduction_to_XJTU-SY_Bearing_Dataset.pdf`
+- the relevant entries in `docs/decisions.md` and `docs/decisions_vi.md`
+
+The PDF is the source of dataset facts. The exact Table 2 values are preserved in `docs/xjtu_dataset_reference.md`; read that reference before implementing XJTU metadata. It is evidence and documentation, not a replacement for project decisions. If a project decision differs from a simplifying assumption in the PDF, follow the project decision and preserve the distinction in documentation.
+
+Important dataset facts from the PDF:
+
+- XJTU-SY contains 15 rolling-element bearings with complete run-to-failure trajectories.
+- There are three operating conditions, with five bearings per condition:
+  - condition 1: 2100 rpm (35 Hz), 12 kN;
+  - condition 2: 2250 rpm (37.5 Hz), 11 kN;
+  - condition 3: 2400 rpm (40 Hz), 10 kN.
+- The tested bearing model is LDK UER204.
+- Two PCB 352C33 accelerometers are mounted at 90 degrees, producing horizontal and vertical channels.
+- The documented sampling frequency is 25.6 kHz. The documented recording window is 32,768 samples (1.28 seconds), repeated every 1 minute.
+- Each sampling is stored as a CSV; the first column is horizontal vibration and the second column is vertical vibration.
+- Table 2 documents, for each bearing, the number of CSV files, reported lifetime, and fault element.
+- The test is described as continuing until the maximum horizontal or vertical amplitude exceeds 10 * A_h, where A_h is the maximum amplitude during the normal operating stage.
+- The PDF distinguishes fault elements in Table 2 from failure appearances such as inner-race wear, cage fracture, outer-race wear, and outer-race fracture in the figures.
+
+Project conventions that must also be preserved:
+
+- A numeric filename `n.csv` is source measurement `n`; do not renumber measurements after gaps.
+- For the canonical Observation layer, use `elapsed_time_sec = (measurement_index - 1) * 60`. This uses source measurement 1 as the time origin; a missing measurement 1 must not be silently collapsed.
+- The raw parser keeps the actual waveform length and raw samples. The documented 32,768 samples are an expected value, not a hard rejection rule for this project.
+- A missing measurement is a real temporal gap. Local repair of a small number of waveform samples, if ever approved, belongs to a separate preprocessing layer and must not overwrite raw data.
+- The canonical raw Observation contract is one record per bearing x measurement x channel. Do not combine horizontal and vertical channels into one raw waveform.
+- `terminal_fault_type` or normalized fault-element metadata is trajectory-level metadata. Do not invent timestamp-level `fault_state` labels from the PDF.
+- Preserve both the source fault label (`fault_element_raw`) and any normalized multi-label representation (`fault_elements`). Do not silently merge fault element labels with failure morphology labels.
+- Keep reported lifetime from the PDF separate from normalized Observation elapsed time. Do not replace one with the other without a documented decision.
+- Condition, bearing, channel, sampling, lifetime, and fault metadata must retain their source path or citation and confidence/provenance where applicable.
+
+When a task would change any of these rules, review the conflict first and update both decision records before implementing the change.

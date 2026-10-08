@@ -1,19 +1,56 @@
-﻿.venv/
+# Python and virtual environments
+.venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
 .ipynb_checkpoints/
+__init__.py
 
+# Local editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Local secrets and environment overrides
+.env
+.env.*
+!.env.example
+
+# Logs, coverage and temporary files
+*.log
+logs/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+tmp/
+temp/
+
+# Raw and generated data: keep only repository placeholders
 data/raw/**
 !data/raw/**/
 !data/raw/**/.gitkeep
 !data/raw/**/README.md
-data/interim/*
+*.csv
+
+data/interim/**
 !data/interim/.gitkeep
-data/processed/*
+
+data/processed/**
 !data/processed/.gitkeep
-artifacts/*
+
+# Generated artifacts and run outputs
+artifacts/**
 !artifacts/.gitkeep
-runs/*
+runs/**
 !runs/.gitkeep
+
+# Large model/checkpoint files
+*.ckpt
+*.pt
+*.pth

@@ -94,3 +94,56 @@ Observation {
 **Consequences:** Leakage boundaries and evaluation scopes are explicit; irregular history, configurable horizons, within-condition generalization, and unseen-condition evaluation are supported. Grouped manifests, inner validation, masks, termination handling, and per-bearing aggregation are required. Architecture and confidence loss remain downstream decisions.
 
 **Reconsideration conditions:** Reliable deployment condition metadata becomes available; validation shows the 30-minute/20-record context is unrepresentative; a validated timestamp-level labeling procedure changes fault_state; or a new dataset/bearing model requires a separately versioned transfer protocol.
+
+## IMPORTANT — Define XJTU-SY parse-time chronology and waveform-length policy
+
+**Decision:** For XJTU-SY, interpret the numeric CSV filename as the source measurement number: `n.csv` is measurement `n`, approximately one minute after the preceding measurement. Preserve this value as `measurement_index`. Define normalized elapsed time from source measurement 1 as `elapsed_time_sec = (measurement_index - 1) * 60`. Keep the actual waveform length in `signal_length`; do not reject a file solely because its length differs from 32,768 samples. The raw parser must preserve the samples as read. Local repair of a small number of missing samples, if needed, is a separate preprocessing step and must not overwrite the raw representation.
+
+**Date:** 2026-10-08
+
+**Problem addressed:** XJTU-SY CSV files do not contain an explicit timestamp, and waveform length may vary with the effective sampling rate or minor acquisition loss. Treating filename order as a newly generated sequential index, forcing every waveform to 32,768 samples, or repairing data during raw parsing would blur provenance and mix ingestion with preprocessing.
+
+**Current system state:** The canonical `Observation` contract and causal experiment protocol are fixed. The XJTU-SY raw tree contains one CSV per measurement, with horizontal and vertical signal columns. The initial sample inspection found 32,768 data rows in representative files, but this is not treated as an unconditional parser requirement.
+
+**Business/project requirements:** Preserve source chronology and bearing provenance; support irregular or missing measurements; retain the raw signal for reproducible downstream processing; avoid discarding usable records because of small length deviations; keep any imputation auditable and reversible.
+
+**Alternatives considered:**
+1. Use `measurement_index * 60` as elapsed time. Rejected for the normalized trajectory representation because source measurement 1 should be the time origin; the source minute number remains available in `measurement_index`.
+2. Renumber files after detecting gaps. Rejected because it would hide missing measurements and damage source chronology.
+3. Require exactly 32,768 samples. Rejected because signal length depends on acquisition details and small deviations do not necessarily make a measurement unusable.
+4. Interpolate or pad samples during raw parsing. Rejected because the raw layer must remain lossless and preprocessing policy should be independently testable.
+5. Interpolate missing measurements. Rejected because a missing one-minute observation is a real temporal gap, not a missing waveform sample.
+
+**Rationale:** The filename is the only available source chronology for XJTU-SY, so its numeric value must be preserved. Using source measurement 1 as time zero makes elapsed time a trajectory-relative quantity while retaining the original minute number. A 1.28-second acquisition at 25.6 kHz gives 32,768 samples as an expected value, not a universal contract. Keeping the observed length and raw samples avoids fabricating data; a later cleaning step can make a narrowly scoped, auditable decision about local sample repair.
+
+**Evidence and assumptions:** The XJTU-SY tree uses numeric CSV filenames such as `1.csv`, `2.csv`, and `100.csv`; each inspected file has horizontal and vertical columns. The dataset acquisition is approximately one measurement per minute and approximately 1.28 seconds per measurement at 25.6 kHz. A missing CSV is treated as a missing observation, while a short or locally incomplete waveform is treated as a signal-quality issue to be reported separately.
+
+**Consequences:** The parser can preserve chronology without requiring timestamps, tolerate legitimate length variation, and keep raw data unchanged. The manifest and validation report must record missing measurement numbers, actual signal lengths, and any parse anomalies. A future cleaning step needs explicit thresholds, masks, and provenance if local repair is introduced.
+
+**Reconsideration conditions:** The source dataset provides authoritative timestamps; the one-minute cadence is shown to be materially different or irregular; acquisition metadata proves that short waveforms represent truncation rather than harmless variation; or downstream analysis requires a different time origin. Any decision to repair raw samples in place would require revising this record.
+## IMPORTANT — Normalize XJTU-SY metadata as separate source-backed layers
+
+**Decision:** Store XJTU-SY metadata outside the canonical raw Observation table in three layers: one dataset metadata row, three condition metadata rows, and one trajectory metadata row per bearing. Use `configs/xjtu_trajectory_metadata.csv` as the editable source mapping for Table 2 trajectory metadata. Generate Parquet outputs from that mapping and the parsed source manifest. Preserve `fault_element_raw` and `reported_lifetime_raw`; store normalized `fault_elements` separately as a list. Derive parsed measurement counts and index bounds from the manifest. Do not create timestamp-level `fault_state` labels from the PDF.
+
+**Date:** 2026-10-08
+
+**Problem addressed:** The PDF provides dataset, condition, bearing lifetime, file-count, and fault-element information, but these fields have different scopes and must not be mixed into the raw Observation contract or treated as timestamp-level supervision.
+
+**Current system state:** XJTU-SY raw CSV files have been parsed into `xjtu_observations.parquet` and `xjtu_source_manifest.parquet`. The PDF Table 2 contains metadata for all 15 bearings. The normalization implementation creates `xjtu_dataset_metadata.parquet`, `xjtu_condition_metadata.parquet`, `xjtu_trajectory_metadata.parquet`, and `xjtu_metadata_report.json` under `data/interim/xjtu/`.
+
+**Business/project requirements:** Keep source labels and provenance auditable; support condition and trajectory-level EDA; preserve the distinction between reported lifetime and normalized Observation elapsed time; allow normalized multi-label fault elements; prevent metadata leakage into the baseline model input; make manual metadata corrections reviewable without changing parser code.
+
+**Alternatives considered:**
+1. Put all metadata into each raw Observation. Rejected because metadata scopes differ and the canonical raw contract should remain stable and lossless.
+2. Parse the PDF at runtime. Rejected because PDF extraction is fragile and manual corrections should be explicit and reviewable.
+3. Store only normalized fault labels. Rejected because the source wording and provenance must remain recoverable.
+4. Use `reported_lifetime_min` as Observation `elapsed_time_sec`. Rejected because reported lifetime and the project's trajectory-relative time convention are distinct.
+5. Infer timestamp-level fault state from the final fault element. Rejected because the PDF provides trajectory-level fault information, not reliable timestamp labels.
+
+**Rationale:** A small, editable CSV is an appropriate source of truth for the 15-row Table 2 mapping, while Parquet is appropriate for downstream data work. Separate dataset, condition, and trajectory tables make scope explicit. Joining the trajectory table to the parsed manifest provides derived counts and measurement bounds without modifying raw observations. Keeping raw and normalized labels side by side preserves both auditability and usability.
+
+**Evidence and assumptions:** The source PDF documents 15 bearings, three conditions, sampling metadata, reported lifetimes, CSV counts, and fault elements in Table 2. The current parsed manifest contains all 9,216 source files with matching bearing/condition keys and no count mismatches. `fault_elements` uses the controlled vocabulary `inner_race`, `outer_race`, `cage`, and `ball`.
+
+**Consequences:** Metadata corrections can be made in the configuration CSV and regenerated. Downstream code must join metadata by `dataset_name`, `experiment_id`, and `bearing_id`. The mapping file and generated Parquet outputs must be kept synchronized. Metadata remains available for EDA and target construction but is excluded from baseline model inputs according to the experiment protocol.
+
+**Reconsideration conditions:** A revised authoritative dataset document changes Table 2; a validated timestamp-level labeling procedure becomes available; metadata must support another dataset with incompatible scopes; or the project requires a versioned metadata ontology beyond the current four fault-element labels.

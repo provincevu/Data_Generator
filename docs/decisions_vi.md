@@ -95,3 +95,56 @@ Observation {
 **Hệ quả:** Ranh giới leakage và phạm vi đánh giá rõ ràng; hỗ trợ history không đều, horizon cấu hình, tổng quát hóa cùng condition và condition chưa thấy. Protocol cần grouped manifest, inner validation, mask, termination và tổng hợp theo bearing. Không quy định kiến trúc neural hoặc confidence loss.
 
 **Điều kiện xem xét lại:** Condition metadata đáng tin cậy luôn có sẵn; validation cho thấy cửa sổ 30 phút/20 record không đại diện; có quy trình gán nhãn fault theo timestamp được kiểm chứng làm thay đổi fault_state; hoặc dataset/model bearing mới cần protocol transfer phiên bản hóa riêng.
+
+## IMPORTANT — Quy định chronology khi parse XJTU-SY và chính sách độ dài waveform
+
+**Quyết định:** Với XJTU-SY, hiểu số trong tên CSV là số thứ tự measurement nguồn: `n.csv` là lần đo thứ `n`, cách lần đo trước xấp xỉ một phút. Giữ nguyên giá trị này trong `measurement_index`. Chuẩn hóa thời gian đã trôi qua, lấy measurement 1 của nguồn làm mốc, theo công thức `elapsed_time_sec = (measurement_index - 1) * 60`. Giữ độ dài waveform thực tế trong `signal_length`; không loại file chỉ vì độ dài khác 32.768 mẫu. Parser raw phải giữ nguyên các mẫu đã đọc. Nếu cần sửa cục bộ một số mẫu thiếu, đó là bước tiền xử lý riêng và không được ghi đè biểu diễn raw.
+
+**Ngày:** 2026-10-08
+
+**Vấn đề được giải quyết:** CSV XJTU-SY không có timestamp tường minh, và độ dài waveform có thể thay đổi theo tần số lấy mẫu thực tế hoặc do mất một lượng nhỏ mẫu khi thu thập. Nếu xem thứ tự tên file như một index mới, bắt buộc mọi waveform dài đúng 32.768 mẫu, hoặc sửa dữ liệu ngay khi parse raw, ta sẽ làm mờ provenance và trộn lẫn ingestion với tiền xử lý.
+
+**Trạng thái hệ thống hiện tại:** Hợp đồng `Observation` chuẩn và protocol thí nghiệm nhân quả đã cố định. Cây raw XJTU-SY có một CSV cho mỗi measurement, với các cột tín hiệu ngang và dọc. Việc kiểm tra ban đầu cho thấy các file mẫu có 32.768 dòng dữ liệu, nhưng đây không phải yêu cầu cứng của parser.
+
+**Yêu cầu nghiệp vụ/dự án:** Bảo toàn chronology và provenance của bearing; hỗ trợ measurement bị thiếu hoặc không đều; giữ tín hiệu raw để tái lập xử lý phía sau; không loại bỏ record còn dùng được chỉ vì lệch độ dài nhỏ; mọi bước điền/sửa dữ liệu phải có thể kiểm tra và hoàn nguyên.
+
+**Các phương án đã cân nhắc:**
+1. Dùng `measurement_index * 60` làm thời gian đã trôi qua. Không chọn cho biểu diễn trajectory chuẩn hóa vì measurement 1 của nguồn nên là mốc thời gian 0; số phút nguồn vẫn được giữ trong `measurement_index`.
+2. Đánh lại số file sau khi phát hiện khoảng trống. Không chọn vì sẽ che giấu measurement bị thiếu và làm hỏng chronology nguồn.
+3. Bắt buộc đúng 32.768 mẫu. Không chọn vì độ dài phụ thuộc vào quá trình thu thập và một sai lệch nhỏ không nhất thiết làm measurement không dùng được.
+4. Nội suy hoặc padding ngay khi parse raw. Không chọn vì tầng raw phải bảo toàn dữ liệu và chính sách tiền xử lý cần được kiểm thử độc lập.
+5. Nội suy measurement bị thiếu. Không chọn vì observation bị thiếu trong một phút là khoảng trống thời gian thực, không phải waveform bị thiếu mẫu.
+
+**Lập luận:** Tên file là chronology nguồn duy nhất hiện có của XJTU-SY, nên phải giữ nguyên giá trị số của nó. Lấy measurement 1 của nguồn làm mốc 0 giúp `elapsed_time_sec` là thời gian tương đối của trajectory nhưng vẫn giữ số phút nguyên bản. Một lần thu khoảng 1,28 giây ở 25,6 kHz cho 32.768 mẫu là giá trị kỳ vọng, không phải hợp đồng tuyệt đối. Giữ độ dài và mẫu raw thực tế tránh tạo dữ liệu giả; bước làm sạch sau này có thể đưa ra quyết định hẹp, có kiểm toán về việc sửa cục bộ một số mẫu.
+
+**Bằng chứng và giả định:** Cây XJTU-SY dùng tên CSV dạng số như `1.csv`, `2.csv`, `100.csv`; các file đã kiểm tra có cột tín hiệu ngang và dọc. Quy trình thu dữ liệu là xấp xỉ một measurement mỗi phút và xấp xỉ 1,28 giây mỗi measurement ở 25,6 kHz. CSV bị thiếu được xem là observation bị thiếu; waveform ngắn hoặc thiếu cục bộ được xem là vấn đề chất lượng tín hiệu cần báo cáo riêng.
+
+**Hệ quả:** Parser có thể giữ chronology mà không cần timestamp, chấp nhận sai lệch độ dài hợp lệ và không thay đổi raw data. Manifest và validation report phải ghi nhận measurement number bị thiếu, độ dài thực tế của tín hiệu và các bất thường khi parse. Nếu bổ sung bước sửa cục bộ sau này, cần quy định rõ ngưỡng, mask và provenance.
+
+**Điều kiện xem xét lại:** Dataset cung cấp timestamp có thẩm quyền; cadence một phút được chứng minh là sai lệch đáng kể hoặc không đều; metadata thu thập cho thấy waveform ngắn là do truncation chứ không phải sai lệch nhỏ; hoặc phân tích phía sau cần một mốc thời gian khác. Việc sửa trực tiếp raw sample sẽ phải làm lại quyết định này.
+## IMPORTANT — Chuẩn hóa metadata XJTU-SY thành các lớp riêng có nguồn
+
+**Quyết định:** Lưu metadata XJTU-SY bên ngoài bảng Observation raw chuẩn thành ba lớp: một dòng metadata dataset, ba dòng metadata condition và một dòng metadata trajectory cho mỗi bearing. Dùng `configs/xjtu_trajectory_metadata.csv` làm bảng mapping nguồn có thể chỉnh sửa cho metadata trajectory từ Bảng 2. Tạo các output Parquet từ mapping này và source manifest đã parse. Giữ `fault_element_raw` và `reported_lifetime_raw`; lưu riêng `fault_elements` đã chuẩn hóa dưới dạng danh sách. Suy ra số measurement đã parse và biên index từ manifest. Không tạo nhãn `fault_state` theo timestamp từ PDF.
+
+**Ngày:** 2026-10-08
+
+**Vấn đề được giải quyết:** PDF cung cấp thông tin về dataset, condition, lifetime, số file và fault element của bearing, nhưng các trường này có phạm vi khác nhau và không được trộn vào hợp đồng Observation raw hoặc coi là supervision theo timestamp.
+
+**Trạng thái hệ thống hiện tại:** CSV raw XJTU-SY đã được parse thành `xjtu_observations.parquet` và `xjtu_source_manifest.parquet`. Bảng 2 trong PDF có metadata của cả 15 bearing. Phần chuẩn hóa tạo `xjtu_dataset_metadata.parquet`, `xjtu_condition_metadata.parquet`, `xjtu_trajectory_metadata.parquet` và `xjtu_metadata_report.json` trong `data/interim/xjtu/`.
+
+**Yêu cầu nghiệp vụ/dự án:** Giữ nhãn nguồn và provenance có thể kiểm tra; hỗ trợ EDA ở cấp condition và trajectory; phân biệt lifetime được công bố với elapsed time của Observation; hỗ trợ fault element nhiều nhãn đã chuẩn hóa; ngăn metadata rò rỉ vào baseline model input; cho phép review mapping thủ công mà không phải sửa code parser.
+
+**Các phương án đã cân nhắc:**
+1. Đưa toàn bộ metadata vào từng Observation raw. Không chọn vì phạm vi metadata khác nhau và hợp đồng raw chuẩn cần ổn định, không mất dữ liệu.
+2. Parse PDF tại runtime. Không chọn vì trích xuất PDF dễ không ổn định và các chỉnh sửa thủ công cần được thể hiện rõ, có thể review.
+3. Chỉ lưu nhãn fault đã chuẩn hóa. Không chọn vì phải giữ lại cách viết và provenance của nguồn.
+4. Dùng `reported_lifetime_min` làm `elapsed_time_sec` của Observation. Không chọn vì lifetime công bố và quy ước thời gian tương đối của trajectory là hai khái niệm khác nhau.
+5. Suy ra fault state theo timestamp từ fault element cuối trajectory. Không chọn vì PDF chỉ cung cấp thông tin fault cấp trajectory, không có nhãn timestamp đáng tin cậy.
+
+**Lập luận:** CSV mapping nhỏ, có thể chỉnh sửa, phù hợp làm nguồn sự thật cho mapping 15 dòng từ Bảng 2; Parquet phù hợp cho xử lý dữ liệu phía sau. Tách bảng dataset, condition và trajectory làm rõ phạm vi. Ghép trajectory metadata với manifest giúp lấy số lượng và biên measurement đã parse mà không sửa Observation raw. Giữ nhãn raw cạnh nhãn chuẩn hóa bảo toàn khả năng kiểm toán và vẫn thuận tiện sử dụng.
+
+**Bằng chứng và giả định:** PDF nguồn ghi nhận 15 bearing, ba condition, metadata sampling, lifetime công bố, số CSV và fault element trong Bảng 2. Manifest hiện tại có đủ 9.216 file nguồn với key bearing/condition khớp và không có sai lệch số lượng. `fault_elements` dùng vocabulary kiểm soát gồm `inner_race`, `outer_race`, `cage` và `ball`.
+
+**Hệ quả:** Có thể sửa metadata trong CSV cấu hình rồi tạo lại output. Code phía sau phải join bằng `dataset_name`, `experiment_id` và `bearing_id`. File mapping và các Parquet đã tạo cần được giữ đồng bộ. Metadata sẵn sàng cho EDA và tạo target nhưng bị loại khỏi baseline model input theo experiment protocol.
+
+**Điều kiện xem xét lại:** Tài liệu dataset có thẩm quyền được cập nhật làm thay đổi Bảng 2; có quy trình gán nhãn theo timestamp được kiểm chứng; metadata cần hỗ trợ dataset khác có phạm vi không tương thích; hoặc dự án cần ontology metadata có version vượt ra ngoài bốn fault-element hiện tại.
