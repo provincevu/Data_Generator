@@ -1,4 +1,4 @@
-"""Command-line entry points for data ingestion."""
+"""Command-line entry points for data ingestion and EDA."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .eda.xjtu import run_xjtu_eda
 from .ingestion.metadata import build_xjtu_metadata
 from .ingestion.xjtu import parse_xjtu
 
@@ -18,13 +19,19 @@ def build_parser() -> argparse.ArgumentParser:
     xjtu.add_argument("--raw-root", type=Path)
     xjtu.add_argument("--output-dir", type=Path)
     xjtu.add_argument("--allow-errors", action="store_true")
-    metadata = subparsers.add_parser(
-        "build-xjtu-metadata", help="normalize XJTU-SY metadata"
-    )
+    metadata = subparsers.add_parser("build-xjtu-metadata", help="normalize XJTU-SY metadata")
     metadata.add_argument("--project-root", type=Path, default=Path.cwd())
     metadata.add_argument("--metadata-config", type=Path)
     metadata.add_argument("--manifest", type=Path)
     metadata.add_argument("--output-dir", type=Path)
+    eda = subparsers.add_parser("eda-xjtu", help="run XJTU-SY exploratory data analysis")
+    eda.add_argument("--project-root", type=Path, default=Path.cwd())
+    eda.add_argument("--observations", type=Path)
+    eda.add_argument("--manifest", type=Path)
+    eda.add_argument("--trajectory-metadata", type=Path)
+    eda.add_argument("--output-dir", type=Path)
+    eda.add_argument("--plot-dir", type=Path)
+    eda.add_argument("--no-plots", action="store_true")
     return parser
 
 
@@ -44,6 +51,14 @@ def main(argv: list[str] | None = None) -> int:
         manifest = args.manifest or project_root / "data/interim/xjtu/xjtu_source_manifest.parquet"
         output_dir = args.output_dir or project_root / "data/interim/xjtu"
         report = build_xjtu_metadata(metadata_config, manifest, output_dir)
+        print(json.dumps(report["summary"], ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "eda-xjtu":
+        observations = args.observations or project_root / "data/interim/xjtu/xjtu_observations.parquet"
+        manifest = args.manifest or project_root / "data/interim/xjtu/xjtu_source_manifest.parquet"
+        trajectory_metadata = args.trajectory_metadata or project_root / "data/interim/xjtu/xjtu_trajectory_metadata.parquet"
+        output_dir = args.output_dir or project_root / "data/interim/xjtu"
+        report = run_xjtu_eda(observations, manifest, trajectory_metadata, output_dir, plot_dir=args.plot_dir, make_plots=not args.no_plots)
         print(json.dumps(report["summary"], ensure_ascii=False, indent=2))
         return 0
     return 2

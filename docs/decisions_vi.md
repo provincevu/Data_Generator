@@ -148,3 +148,47 @@ Observation {
 **Hệ quả:** Có thể sửa metadata trong CSV cấu hình rồi tạo lại output. Code phía sau phải join bằng `dataset_name`, `experiment_id` và `bearing_id`. File mapping và các Parquet đã tạo cần được giữ đồng bộ. Metadata sẵn sàng cho EDA và tạo target nhưng bị loại khỏi baseline model input theo experiment protocol.
 
 **Điều kiện xem xét lại:** Tài liệu dataset có thẩm quyền được cập nhật làm thay đổi Bảng 2; có quy trình gán nhãn theo timestamp được kiểm chứng; metadata cần hỗ trợ dataset khác có phạm vi không tương thích; hoặc dự án cần ontology metadata có version vượt ra ngoài bốn fault-element hiện tại.
+## IMPORTANT — Dùng 11 mốc chuẩn hóa trajectory cho FFT EDA XJTU-SY
+
+**Quyết định:** EDA XJTU-SY sẽ tính các thống kê miền tần số tại 11 mốc chuẩn hóa của trajectory: 0%, 10%, 20%, ..., 100%. Mốc 0% là measurement nguồn đầu tiên và mốc 100% là measurement nguồn cuối cùng của từng bearing. Các mốc ở giữa chọn measurement gần nhất theo vị trí trong trajectory, dựa trên các observation đã sắp xếp của bearing đó; số measurement nguồn được chọn phải được lưu trong output EDA.
+
+**Ngày:** 2026-10-08
+
+**Vấn đề được giải quyết:** Các trajectory XJTU-SY có số measurement rất khác nhau. Nếu chọn cùng một số measurement tuyệt đối, các FFT sẽ đại diện cho các giai đoạn vòng đời khác nhau giữa các bearing.
+
+**Trạng thái hệ thống hiện tại:** Observation raw và trajectory metadata đã được chuẩn hóa. Phạm vi EDA gồm thống kê miền thời gian cho toàn bộ measurement và thống kê miền tần số tại các mốc đại diện. Chưa tạo output FFT.
+
+**Yêu cầu nghiệp vụ/dự án:** So sánh diễn biến phổ tần giữa bearing, condition, channel và fault element cấp trajectory, đồng thời giữ nguyên measurement index nguồn và không nội suy hoặc tạo observation giả.
+
+**Các phương án đã cân nhắc:**
+1. Chỉ dùng measurement đầu, giữa và cuối. Không chọn vì quá thô để quan sát diễn biến phổ theo thời gian.
+2. Dùng các measurement index tuyệt đối cố định. Không chọn vì trajectory có lifetime và số file khác nhau.
+3. Resample hoặc nội suy mọi trajectory về cùng độ dài. Không chọn vì sẽ tạo observation waveform tổng hợp và làm mờ chronology nguồn.
+4. Tính FFT cho mọi measurement. Tạm thời chưa chọn vì tăng chi phí tính toán và dung lượng mà chưa cần cho vòng EDA so sánh đầu tiên.
+
+**Lập luận:** 11 vị trí chuẩn hóa cách đều tạo ra cùng một lưới vòng đời để so sánh giữa các trajectory nhưng không thay đổi waveform nguồn. Chọn measurement gần nhất là quyết định tất định, có thể kiểm tra và không tạo dữ liệu giả. Lưu cả mốc chuẩn hóa và `measurement_index` giúp kết quả có thể diễn giải.
+
+**Bằng chứng và giả định:** Bảng 2 của tài liệu XJTU-SY cho thấy độ dài trajectory khác nhau đáng kể, từ 42 đến 2.538 CSV. Mỗi CSV chứa waveform horizontal và vertical của một lần sampling.
+
+**Hệ quả:** Output EDA phải có `anchor_fraction`, `selected_measurement_index`, `channel_id` và các trường thống kê FFT. Với trajectory rất ngắn, hai mốc gần nhau có thể chọn cùng một measurement; điều này được chấp nhận và phải được ghi nhận thay vì che giấu.
+
+**Điều kiện xem xét lại:** Task phía sau yêu cầu cách căn chỉnh vòng đời khác, có sự kiện timestamp-level được kiểm chứng, hoặc EDA cần phân tích phổ cho toàn bộ measurement.
+## IMPORTANT — Chốt tiền xử lý FFT ban đầu cho XJTU-SY
+
+**Quyết định:** Trong EDA FFT ban đầu của XJTU-SY, trừ giá trị trung bình của waveform rồi áp dụng cửa sổ Hann trước khi tính FFT thực một phía. Lưu đồng thời lưới tần số và phổ biên độ một phía, cùng với tần số trội, biên độ trội, tổng công suất phổ và bốn thống kê công suất theo dải tần cố định. Giữ độ dài waveform thực tế và tần số lấy mẫu trong từng dòng FFT.
+
+**Ngày:** 2026-10-08
+
+**Vấn đề được giải quyết:** Một thống kê FFT có thể tái lập cần quy định rõ cách xử lý giá trị trung bình, rò rỉ phổ, chuẩn hóa biên độ và waveform có độ dài thay đổi. Nếu để ngầm định, các lần so sánh sau sẽ khó tái lập.
+
+**Trạng thái hệ thống hiện tại:** Mã EDA ghi một dòng thống kê miền thời gian cho mỗi Observation và 330 dòng FFT cho 15 trajectory × 2 kênh × 11 mốc. Waveform raw không bị sửa.
+
+**Yêu cầu nghiệp vụ/dự án:** Làm cho lượt EDA đầu tiên có tính quyết định và truy vết được; giữ đủ thông tin phổ cho các biểu đồ và phân tích sau; chấp nhận waveform khác 32.768 mẫu.
+
+**Các phương án đã cân nhắc:** FFT raw không trừ trung bình và không dùng cửa sổ; thêm mẫu 0 hoặc nội suy về độ dài cố định; chỉ lưu tần số trội; và tính phổ cho mọi measurement. Các phương án này bị hoãn hoặc loại vì để ngầm định rò rỉ/chuẩn hóa, tạo mẫu giả, làm mất thông tin hoặc tăng chi phí ban đầu không cần thiết.
+
+**Lập luận:** Trừ trung bình loại thành phần DC không phải trọng tâm của so sánh rung. Cửa sổ Hann giảm rò rỉ trong khoảng thu hữu hạn. FFT thực một phía giữ phần tần số dương, còn việc lưu đầy đủ mảng tần số và biên độ giúp tái sử dụng output. Độ dài thực tế vẫn là nguồn sự thật, nên độ phân giải tần số được ghi theo từng dòng thay vì giả định cố định.
+
+**Hệ quả:** Các output FFT có thể so sánh trực tiếp khi tần số lấy mẫu giống nhau, nhưng các waveform khác độ dài có độ phân giải tần số khác nhau và phải dùng lưới tần số đã lưu hoặc nội suy có ghi rõ khi vẽ. Output lớn hơn bản chỉ lưu vài số vô hướng. Mã ban đầu dùng các dải cố định 0–1 kHz, 1–5 kHz, 5–10 kHz và 10–12,8 kHz cho tần số lấy mẫu được tài liệu hóa là 25,6 kHz.
+
+**Điều kiện xem xét lại:** Phương pháp phía sau yêu cầu chuẩn hóa biên độ, cửa sổ, detrend, ước lượng mật độ phổ, lưới tần số hoặc chuẩn hóa theo tần số lấy mẫu khác; hoặc dự án chuyển sang lưu phổ cho mọi measurement.

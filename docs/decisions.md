@@ -147,3 +147,47 @@ Observation {
 **Consequences:** Metadata corrections can be made in the configuration CSV and regenerated. Downstream code must join metadata by `dataset_name`, `experiment_id`, and `bearing_id`. The mapping file and generated Parquet outputs must be kept synchronized. Metadata remains available for EDA and target construction but is excluded from baseline model inputs according to the experiment protocol.
 
 **Reconsideration conditions:** A revised authoritative dataset document changes Table 2; a validated timestamp-level labeling procedure becomes available; metadata must support another dataset with incompatible scopes; or the project requires a versioned metadata ontology beyond the current four fault-element labels.
+## IMPORTANT — Use eleven normalized trajectory anchors for XJTU-SY FFT EDA
+
+**Decision:** The XJTU-SY EDA will compute frequency-domain summaries using eleven normalized trajectory anchors: 0%, 10%, 20%, ..., 100%. The 0% anchor is the first available source measurement and the 100% anchor is the last available source measurement for each bearing. Intermediate anchors select the nearest measurement by trajectory position, using the measurement index among that bearing's ordered observations; the selected source measurement index remains recorded in the EDA output.
+
+**Date:** 2026-10-08
+
+**Problem addressed:** XJTU-SY trajectories have very different numbers of measurements. Selecting the same absolute measurement numbers would make FFT comparisons represent different lifecycle stages across bearings.
+
+**Current system state:** Raw observations and trajectory metadata are normalized. The EDA scope includes time-domain summaries for all measurements and frequency-domain summaries at selected representative points. No FFT output has been generated yet.
+
+**Business/project requirements:** Compare spectral evolution across bearings, conditions, channels, and trajectory-level fault elements while preserving the original measurement index and avoiding interpolation or invented observations.
+
+**Alternatives considered:**
+1. Use only first, middle, and last measurements. Rejected because it is too coarse for observing gradual spectral evolution.
+2. Use fixed absolute measurement indices. Rejected because bearing trajectories have different lifetimes and file counts.
+3. Resample or interpolate every trajectory to a common length. Rejected because it would create synthetic waveform observations and blur source chronology.
+4. Compute FFT for every measurement. Deferred because it increases computation and storage without being necessary for the first comparative EDA pass.
+
+**Rationale:** Eleven equally spaced normalized positions provide a consistent lifecycle grid across trajectories while keeping the original waveform unchanged. Nearest-measurement selection is deterministic, auditable, and does not fabricate data. Recording both the normalized anchor and selected `measurement_index` preserves interpretability.
+
+**Evidence and assumptions:** Table 2 of the XJTU-SY dataset document reports substantially different trajectory lengths, from 42 to 2,538 CSV files. Each CSV contains the horizontal and vertical waveform for one sampling event.
+
+**Consequences:** The EDA output must include `anchor_fraction`, `selected_measurement_index`, `channel_id`, and the FFT summary fields. Some adjacent anchors may select the same measurement for very short trajectories; this is acceptable and must be reported rather than hidden.
+
+**Reconsideration conditions:** A downstream task requires a different lifecycle alignment, a validated timestamp-level event alignment becomes available, or the EDA needs full per-measurement spectral analysis.
+## IMPORTANT — Define the initial XJTU-SY FFT preprocessing contract
+
+**Decision:** For the initial XJTU-SY FFT EDA, subtract the waveform mean and apply a Hann window before computing a one-sided real FFT. Store the frequency grid and one-sided amplitude spectrum together with the dominant frequency, dominant amplitude, total spectral power, and four fixed band-power summaries. Keep the observed waveform length and sampling rate in every FFT row.
+
+**Date:** 2026-10-08
+
+**Problem addressed:** A reproducible FFT summary needs an explicit treatment of the waveform mean, spectral leakage, amplitude scaling, and variable waveform length. Leaving these choices implicit would make later comparisons difficult to reproduce.
+
+**Current system state:** The EDA implementation writes one time-domain summary row per Observation and 330 FFT rows for 15 trajectories × 2 channels × 11 anchors. The raw waveform is not modified.
+
+**Business/project requirements:** Make the first EDA pass deterministic and auditable; preserve enough spectral information for later plots and analysis; tolerate waveform lengths that differ from 32,768 samples.
+
+**Alternatives considered:** Raw FFT without centering or windowing; zero-padding or resampling to a fixed length; storing only a dominant frequency; and computing a full spectrum for every measurement. These were deferred or rejected because they either leave leakage and scaling ambiguous, fabricate samples, discard useful information, or add unnecessary initial cost.
+
+**Rationale:** Mean subtraction removes the DC component that is not the focus of the vibration comparison. The Hann window reduces leakage for finite acquisition windows. A one-sided real FFT preserves the positive-frequency content, while retaining the full frequency and amplitude arrays keeps the output reusable. The observed length remains authoritative, so frequency resolution is recorded per row rather than assumed constant.
+
+**Consequences:** FFT outputs are directly comparable when sampling rates match, but spectra from different lengths have different frequency resolutions and should be compared using their recorded frequency grids or an explicitly documented interpolation for plotting. The output is larger than a scalar-only summary. The initial implementation uses fixed bands 0–1 kHz, 1–5 kHz, 5–10 kHz, and 10–12.8 kHz for the documented 25.6 kHz sampling rate.
+
+**Reconsideration conditions:** A downstream method requires a different amplitude calibration, window, detrending policy, spectral density estimate, frequency grid, or sampling-rate normalization; or the project adopts full per-measurement spectral storage.
