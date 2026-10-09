@@ -358,3 +358,9 @@ The anchor snapshot is part of the history with `lag_sec = 0`. History records u
 ### Clarification — Point 1: recent context pool versus full remaining-lifecycle target
 
 The phrase “full lifecycle prediction” means predicting the complete remaining trajectory after `t_anchor`, not reconstructing observations before the anchor. The input context is therefore limited to at most 20 actual snapshots nearest to `t_anchor` within `[t_anchor - 1800, t_anchor]`, including the anchor and requiring at least 10 records for the main protocol. This input limit does not limit the future target: a later task may expose all observed future snapshots from immediately after the anchor through the trajectory endpoint or `END_OF_TRAJECTORY`.
+
+### Clarification — Point 2: context-count distribution
+
+For the main protocol, sample the integer context count as `K ~ Uniform{10, ..., min(20, pool_size)}`. `K` includes the anchor snapshot. Anchors with fewer than 10 eligible pool records are excluded from the main protocol. For a separate robustness protocol, sample `K ~ Uniform{3, ..., 9}` and label it `context_regime = short_robustness`; these short contexts are not silently mixed into main-protocol training or aggregate results.
+
+**Rationale:** Variable `K` represents realistic differences in available monitoring history while preserving the minimum-history requirement of the main protocol. A discrete uniform distribution gives equal coverage to each supported context size, makes sensitivity by `K` measurable, and avoids letting very short contexts redefine the primary task.

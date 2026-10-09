@@ -359,3 +359,9 @@ Snapshot anchor thuộc history với `lag_sec = 0`. Các record history dùng `
 ### Làm rõ — Điểm 1: context gần đây và target toàn bộ lifecycle còn lại
 
 Cụm “dự đoán toàn bộ lifecycle” nghĩa là dự đoán toàn bộ trajectory còn lại sau `t_anchor`, không tái tạo các observation trước anchor. Vì vậy input context được giới hạn ở tối đa 20 snapshot thực tế gần `t_anchor` nhất trong `[t_anchor - 1800, t_anchor]`, có cả anchor và yêu cầu tối thiểu 10 record cho protocol chính. Giới hạn input này không giới hạn future target: task sau có thể cung cấp toàn bộ snapshot tương lai từ ngay sau anchor đến endpoint của trajectory hoặc `END_OF_TRAJECTORY`.
+
+### Làm rõ — Điểm 2: phân phối số lượng context
+
+Với protocol chính, lấy số nguyên `K ~ Uniform{10, ..., min(20, pool_size)}`. `K` bao gồm snapshot anchor. Anchor có dưới 10 record hợp lệ trong pool sẽ bị loại khỏi protocol chính. Với robustness protocol riêng, lấy `K ~ Uniform{3, ..., 9}` và gắn nhãn `context_regime = short_robustness`; các context ngắn này không được âm thầm trộn vào train hoặc kết quả tổng hợp của protocol chính.
+
+**Lập luận:** `K` thay đổi thể hiện sự khác nhau thực tế về lượng history quan sát được nhưng vẫn giữ minimum-history của protocol chính. Phân phối đều rời rạc bao phủ công bằng từng kích thước context, cho phép đo độ nhạy theo `K` và tránh để context quá ngắn định nghĩa lại bài toán chính.
