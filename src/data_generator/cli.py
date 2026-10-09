@@ -1,4 +1,4 @@
-"""Command-line entry points for data ingestion, features, and EDA."""
+﻿"""Command-line entry points for data ingestion, features, EDA, and sampling."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from .eda.xjtu import run_xjtu_eda
 from .features.xjtu import run_xjtu_features
 from .ingestion.metadata import build_xjtu_metadata
 from .ingestion.xjtu import parse_xjtu
+from .sampling.causal import sample_causal_manifest
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -29,6 +30,17 @@ def build_parser() -> argparse.ArgumentParser:
     features.add_argument("--project-root", type=Path, default=Path.cwd())
     features.add_argument("--observations", type=Path)
     features.add_argument("--output-dir", type=Path)
+    sampler = subparsers.add_parser("sample-xjtu", help="sample causal XJTU-SY manifests")
+    sampler.add_argument("--project-root", type=Path, default=Path.cwd())
+    sampler.add_argument("--snapshot-features", type=Path)
+    sampler.add_argument("--output", type=Path)
+    sampler.add_argument("--split", choices=("train", "validation", "test"), required=True)
+    sampler.add_argument("--seed", type=int, required=True)
+    sampler.add_argument("--epoch", type=int)
+    sampler.add_argument("--anchors-per-trajectory", type=int, required=True)
+    sampler.add_argument("--context-regime", choices=("main", "short_robustness"), default="main")
+    sampler.add_argument("--sparse-regime", choices=("dense", "sparse_10", "sparse_5", "sparse_1"), default="dense")
+    sampler.add_argument("--full-remaining-lifecycle", action="store_true")
     eda = subparsers.add_parser("eda-xjtu", help="run XJTU-SY exploratory data analysis")
     eda.add_argument("--project-root", type=Path, default=Path.cwd())
     eda.add_argument("--observations", type=Path)
@@ -64,6 +76,22 @@ def main(argv: list[str] | None = None) -> int:
         observations = args.observations or project_root / "data/interim/xjtu/xjtu_observations.parquet"
         output_dir = args.output_dir or project_root / "data/interim/xjtu"
         report = run_xjtu_features(observations, output_dir)
+        print(json.dumps(report["summary"], ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "sample-xjtu":
+        snapshot_features = args.snapshot_features or project_root / "data/interim/xjtu/xjtu_snapshot_features.parquet"
+        output = args.output or project_root / "data/interim/xjtu" / f"xjtu_sample_manifest_{args.split}.parquet"
+        report = sample_causal_manifest(
+            snapshot_features,
+            output,
+            split=args.split,
+            seed=args.seed,
+            anchors_per_trajectory=args.anchors_per_trajectory,
+            context_regime=args.context_regime,
+            sparse_regime=args.sparse_regime,
+            epoch=args.epoch,
+            full_remaining_lifecycle=args.full_remaining_lifecycle,
+        )
         print(json.dumps(report["summary"], ensure_ascii=False, indent=2))
         return 0
     if args.command == "eda-xjtu":
