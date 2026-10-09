@@ -1,0 +1,8 @@
+# Điền các giá trị từ tài liệu kỹ thuật có thẩm quyền của ổ bi XJTU-SY.
+# Không dùng kích thước danh nghĩa của một model khác để thay thế.
+bearing_model: LDK UER204
+number_of_rolling_elements: null
+rolling_element_diameter_mm: null
+pitch_diameter_mm: null
+contact_angle_deg: 0.0
+source: null

@@ -30,6 +30,16 @@ Ghi lại các quyết định quan trọng của dự án để lý do và bố
 
 ### **Các yêu cầu khi trả lời**
 - Khi trả lời tôi, hạn chế sử dụng các thuật ngữ tiếng anh gây khó hiểu (vẫn có thể sử dụng các thuật ngữ tiếng anh nếu việc dịch sang tiếng việt trở nên không sát nghĩa). Đối với tôi, một cuộc hội thoại tốt là cuộc hội thoại mà cả 2 bên đều hiểu ý của nhau
+
+### **Yêu cầu bắt buộc khi sinh dữ liệu lifecycle**
+
+Trước khi thực hiện bất kỳ hành động nào để triển khai, sửa, kiểm thử, review hoặc diễn giải pipeline sinh dữ liệu lifecycle, tín hiệu rung tổng hợp, RUL, chỉ số sức khỏe, các giai đoạn thoái hóa hoặc nhãn dự đoán hỏng hóc, Agent bắt buộc phải đọc:
+
+- `docs/lifecycle_generation_requirements.md`
+- `docs/lifecycle_generation_requirements_vi.md`
+- các mục liên quan trong `docs/decisions.md` và `docs/decisions_vi.md`
+
+Đây là yêu cầu bắt buộc, không phải gợi ý. Agent phải kiểm tra đủ cả năm yêu cầu: tiến trình khỏe mạnh/FPT/thoái hóa/EOL rõ ràng; biến đổi miền thời gian và tần số có ý nghĩa vật lý với xung tuần hoàn; nhãn RUL/HI đồng bộ; đa dạng ngẫu nhiên có seed tái lập; và tính nhất quán giữa các kênh cảm biến. Nếu thay đổi cố ý vi phạm một yêu cầu, phải dừng để ghi nhận hoặc xem xét một quyết định rõ ràng trong cả hai file quyết định trước khi tiếp tục.
 ### **Hướng dẫn và context lâu dài về dataset XJTU-SY**
 
 Trước khi thực hiện bất kỳ task nào đọc, biến đổi, gán nhãn, phân tích, chia tập hoặc xây dựng model trên dữ liệu XJTU-SY, Agent bắt buộc phải đọc:

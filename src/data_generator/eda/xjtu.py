@@ -14,13 +14,18 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from .bearing_frequencies import (
+    BearingGeometry,
+    characteristic_frequencies,
+    load_bearing_geometry,
+)
 from ..ingestion.xjtu import DATASET_NAME
 
 ANCHOR_FRACTIONS = tuple(index / 10 for index in range(11))
 SPECTRAL_BANDS_HZ = ((0.0, 1_000.0), (1_000.0, 5_000.0), (5_000.0, 10_000.0), (10_000.0, 12_800.0))
 TIME_CACHE_VERSION = "2"
-FFT_CACHE_VERSION = "1"
-PLOT_CACHE_VERSION = "3"
+FFT_CACHE_VERSION = "2"
+PLOT_CACHE_VERSION = "4"
 EXPECTED_PLOT_FILES = (
     "lifecycle_rms.png",
     "lifecycle_peak_abs.png",
@@ -46,9 +51,13 @@ FFT_SUMMARY_SCHEMA = pa.schema([
     ("dataset_name", pa.string()), ("experiment_id", pa.string()), ("bearing_id", pa.string()),
     ("channel_id", pa.string()), ("channel_direction", pa.string()), ("anchor_fraction", pa.float64()),
     ("anchor_percent", pa.int64()), ("selected_measurement_index", pa.int64()),
-    ("selected_elapsed_time_sec", pa.float64()), ("sampling_rate_hz", pa.float64()), ("signal_length", pa.int64()),
+    ("selected_elapsed_time_sec", pa.float64()), ("rotational_speed_rpm", pa.float64()),
+    ("sampling_rate_hz", pa.float64()), ("signal_length", pa.int64()),
     ("frequency_resolution_hz", pa.float64()), ("n_fft", pa.int64()), ("preprocessing", pa.string()),
     ("window", pa.string()), ("dominant_frequency_hz", pa.float64()), ("dominant_amplitude", pa.float64()),
+    ("shaft_frequency_hz", pa.float64()), ("bpfo_hz", pa.float64()), ("bpfi_hz", pa.float64()),
+    ("bsf_hz", pa.float64()), ("ftf_hz", pa.float64()),
+    ("characteristic_frequency_status", pa.string()), ("bearing_geometry_source", pa.string()),
     ("total_spectral_power", pa.float64()), ("band_power_0_1000_hz", pa.float64()),
     ("band_power_1000_5000_hz", pa.float64()), ("band_power_5000_10000_hz", pa.float64()),
     ("band_power_10000_12800_hz", pa.float64()), ("frequencies_hz", pa.list_(pa.float32())),
@@ -186,15 +195,27 @@ def _time_row(row: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _fft_rows(row: dict[str, Any], metadata: dict[str, Any], anchors: Iterable[tuple[float, int]]) -> list[dict[str, Any]]:
+def _fft_rows(
+    row: dict[str, Any],
+    metadata: dict[str, Any],
+    anchors: Iterable[tuple[float, int]],
+    geometry: BearingGeometry | None,
+) -> list[dict[str, Any]]:
     signal = np.asarray(row["vibration_signal"], dtype=np.float64)
     summary = _fft_summary(signal, float(row["sampling_rate_hz"]))
+    characteristic = characteristic_frequencies(float(row["rotational_speed_rpm"]), geometry)
     return [{
         "dataset_name": row["dataset_name"], "experiment_id": row["experiment_id"], "bearing_id": row["bearing_id"],
         "channel_id": row["channel_id"], "channel_direction": row["channel_direction"],
         "anchor_fraction": fraction, "anchor_percent": percent,
         "selected_measurement_index": row["measurement_index"], "selected_elapsed_time_sec": row["elapsed_time_sec"],
+        "rotational_speed_rpm": row["rotational_speed_rpm"],
         "sampling_rate_hz": row["sampling_rate_hz"], "signal_length": len(signal), **summary,
+        **characteristic,
+        "characteristic_frequency_status": (
+            "configured" if geometry is not None else "geometry_not_configured"
+        ),
+        "bearing_geometry_source": geometry.source if geometry is not None else None,
         "fault_element_raw": metadata["fault_element_raw"], "fault_elements": metadata["fault_elements"],
         "failure_observed": metadata["failure_observed"],
     } for fraction, percent in anchors]
@@ -362,14 +383,21 @@ def run_xjtu_eda(
     output_dir: str | Path,
     *,
     plot_dir: str | Path | None = None,
+    bearing_geometry_path: str | Path | None = None,
     make_plots: bool = True,
     force_recompute: bool = False,
 ) -> dict[str, Any]:
-    """Generate cached time summaries, FFT summaries, and Vietnamese plots."""
+    """Generate cached summaries and Vietnamese plots for XJTU-SY."""
     observations_path, manifest_path, trajectory_metadata_path, output_dir = [
         Path(path).resolve()
         for path in (observations_path, manifest_path, trajectory_metadata_path, output_dir)
     ]
+    bearing_geometry_path = (
+        Path(bearing_geometry_path).resolve()
+        if bearing_geometry_path is not None
+        else None
+    )
+    bearing_geometry = load_bearing_geometry(bearing_geometry_path)
     for path, label in (
         (observations_path, "observations"),
         (manifest_path, "manifest"),
@@ -390,6 +418,8 @@ def run_xjtu_eda(
         "manifest": _file_signature(manifest_path),
         "trajectory_metadata": _file_signature(trajectory_metadata_path),
     }
+    if bearing_geometry_path is not None:
+        input_signatures["bearing_geometry"] = _file_signature(bearing_geometry_path)
     time_key = _cache_key(
         {
             "version": TIME_CACHE_VERSION,
@@ -408,6 +438,7 @@ def run_xjtu_eda(
             "observations": input_signatures["observations"],
             "manifest": input_signatures["manifest"],
             "trajectory_metadata": input_signatures["trajectory_metadata"],
+            "bearing_geometry": input_signatures.get("bearing_geometry"),
             "anchor_fractions": list(ANCHOR_FRACTIONS),
             "preprocessing": "mean_centered_hann",
         }
@@ -479,6 +510,7 @@ def run_xjtu_eda(
             "bearing_id",
             "measurement_index",
             "elapsed_time_sec",
+            "rotational_speed_rpm",
             "channel_id",
             "channel_direction",
             "sampling_rate_hz",
@@ -497,7 +529,7 @@ def run_xjtu_eda(
                     [],
                 )
                 if anchors:
-                    output.extend(_fft_rows(row, metadata[key], anchors))
+                    output.extend(_fft_rows(row, metadata[key], anchors, bearing_geometry))
             if output:
                 fft_writer = _write_batch(
                     fft_writer,
@@ -559,6 +591,9 @@ def run_xjtu_eda(
             "observations": str(observations_path),
             "manifest": str(manifest_path),
             "trajectory_metadata": str(trajectory_metadata_path),
+            "bearing_geometry": (
+                str(bearing_geometry_path) if bearing_geometry_path is not None else None
+            ),
         },
         "configuration": {
             "anchor_fractions": list(ANCHOR_FRACTIONS),
@@ -572,6 +607,27 @@ def run_xjtu_eda(
             },
             "time_summary_scope": "all observations and channels",
             "fft_scope": "selected observations and channels at 11 normalized anchors",
+            "bearing_characteristic_frequencies": {
+                "status": (
+                    "configured" if bearing_geometry is not None else "geometry_not_configured"
+                ),
+                "geometry_config": (
+                    str(bearing_geometry_path) if bearing_geometry_path is not None else None
+                ),
+                "formulas": {
+                    "bpfo_hz": "N/2 * fr * (1 - (d/D) * cos(theta))",
+                    "bpfi_hz": "N/2 * fr * (1 + (d/D) * cos(theta))",
+                    "bsf_hz": "D/(2*d) * fr * (1 - ((d/D) * cos(theta))^2)",
+                    "ftf_hz": "1/2 * fr * (1 - (d/D) * cos(theta))",
+                },
+                "required_geometry_fields": [
+                    "bearing_model",
+                    "number_of_rolling_elements",
+                    "rolling_element_diameter_mm",
+                    "pitch_diameter_mm",
+                    "contact_angle_deg",
+                ],
+            },
         },
         "summary": {
             "observation_summary_rows": time_count,

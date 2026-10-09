@@ -258,3 +258,43 @@ Dùng split baseline theo nhóm, tất định cho tiền xử lý: condition 3 
 **Hệ quả:** Phase 3 tạo `xjtu_observation_features.parquet`, `xjtu_snapshot_features.parquet`, `xjtu_feature_scaler.json`, `xjtu_feature_validation.json` và `xjtu_feature_report.json`. Bảng snapshot có `D = 30`; vector đã chuẩn hóa có thể đưa vào baseline hoặc prototype diffusion. STFT, encoder học được, chọn feature tự động và sửa outlier vẫn là việc tương lai. Việc gán train/validation/test này là quy ước preprocessing baseline, không phải bộ sinh fold đánh giá cuối cùng.
 
 **Điều kiện xem xét lại:** Mô hình phía sau cần cách đóng gói kênh khác, có nhãn timestamp-level được kiểm chứng, có chế độ sampling khác, cần các fold đánh giá xoay vòng, cần họ chuẩn hóa khác hoặc có bằng chứng schema 15 feature/kênh bỏ sót thông tin suy giảm quan trọng. Mọi thay đổi phải tăng phiên bản schema feature và cập nhật cả hai decision record.
+
+## IMPORTANT — Đặt yêu cầu bắt buộc để lifecycle phù hợp với dự đoán sức khỏe
+
+**Quyết định:** Xem năm yêu cầu là tiêu chí bắt buộc để chấp nhận mọi lifecycle được sinh ra cho mô hình RUL, health index, phân loại giai đoạn thoái hóa hoặc dự đoán hỏng hóc: tiến trình khỏe mạnh/FPT/thoái hóa/EOL rõ ràng; biến đổi có ý nghĩa vật lý ở miền thời gian và tần số với xung tuần hoàn; nhãn sinh đồng bộ từ trạng thái tạo dữ liệu; biến thiên ngẫu nhiên có seed tái lập; và các kênh cảm biến đồng bộ với khác biệt tín hiệu theo hướng cảm biến.
+
+**Ngày:** 2026-10-09
+
+**Vấn đề được giải quyết:** Pipeline chỉ phóng đại biên độ của tín hiệu khỏe có thể tạo ra file nhìn có vẻ hợp lý nhưng khiến AI học mẹo như RMS. Cách này không tạo được chuyển tiếp có thể học, bằng chứng tần số lỗi có cơ sở vật lý, target đồng bộ, biến thiên thực tế hoặc hành vi đa kênh nhất quán.
+
+**Trạng thái hệ thống hiện tại:** Dự án đã có observation raw XJTU-SY, metadata, EDA và trích xuất feature. Các yêu cầu lâu dài cho pipeline sinh lifecycle tổng hợp trước đây chưa được ghi thành chỉ dẫn bắt buộc. Lớp raw XJTU chuẩn vẫn phải dựa trên nguồn và không được nhầm với nhãn tổng hợp.
+
+**Yêu cầu nghiệp vụ/dự án:** Sinh dữ liệu có thể dùng cho học có giám sát RUL hoặc giai đoạn thoái hóa; giữ nền khỏe mạnh; thể hiện FPT và EOL; có RUL và HI cho từng mẫu; tạo các kịch bản hỏng khác nhau nhưng tái lập được; và biểu diễn horizontal/vertical như các kênh của cùng một lifecycle vật lý.
+
+**Các phương án đã cân nhắc:** Chấp nhận chỉ phóng đại biên độ; dùng một đường cong thoái hóa đơn điệu và tất định; sinh nhãn sau từ tên file; tạo các kênh cảm biến độc lập; hoặc chỉ thêm tần số lỗi như hiệu ứng trực quan mà không có cơ chế xung tuần hoàn. Không chọn vì các cách này khuyến khích học mẹo, che giấu chuyển trạng thái, làm lệch nhãn, vi phạm tính vật lý đa kênh hoặc không tạo được cấu trúc để học tần số lỗi.
+
+**Lập luận:** Năm yêu cầu cùng nhau khống chế các lỗi quan trọng nhất của dữ liệu bảo trì dự đoán tổng hợp. Trạng thái sức khỏe ẩn dùng chung làm waveform và nhãn nhất quán; RUL đoạn thẳng theo FPT tạo target rõ ràng; xung tuần hoàn và tần số đặc trưng bổ sung cấu trúc ngoài biên độ; tuổi thọ và nhiễu ngẫu nhiên làm giảm ghi nhớ máy móc; đồng bộ thời gian giữa các kênh giữ được ý nghĩa vật lý của quan sát đa cảm biến. Seed và thông số sinh giúp tái lập và kiểm toán các lifecycle.
+
+**Hệ quả:** Mọi pipeline sinh lifecycle sau này phải ghi FPT, EOL, stage, RUL, HI, seed và thông số sinh theo từng mẫu hoặc lifecycle. Pipeline phải cung cấp đủ thống kê miền thời gian/tần số để review chuyển tiếp và không được tuyên bố chính xác vật lý khi thiếu hình học hoặc hiệu chuẩn. Mọi ngoại lệ có chủ ý phải có decision record mới được review ở cả hai ngôn ngữ. Các yêu cầu này có thể làm pipeline phức tạp hơn và khiến kiểm tra bằng mắt đơn thuần không còn đủ.
+
+**Điều kiện xem xét lại:** Nghiên cứu trên dữ liệu thật đã kiểm chứng cho thấy một yêu cầu không phù hợp với triển khai đích; một loại cảm biến khác cần hợp đồng đa kênh riêng; task đích là không giám sát và không dùng nhãn lifecycle; hoặc mô hình vật lý có thẩm quyền làm thay đổi cơ chế thoái hóa cần thiết. Khi đó phải giữ lại lý do cũ và version hóa thay đổi mới.
+
+## IMPORTANT — Cho phép cấu hình các tần số đặc trưng của ổ bi XJTU-SY
+
+**Quyết định:** Bổ sung `shaft_frequency_hz`, `bpfo_hz`, `bpfi_hz`, `bsf_hz` và `ftf_hz` vào bảng tóm tắt FFT XJTU-SY. Tính tần số trục từ `rotational_speed_rpm`. Chỉ tính BPFO, BPFI, BSF và FTF khi có tệp YAML đầy đủ thông số hình học ổ bi; nếu không thì để bốn giá trị này là null và ghi trạng thái `geometry_not_configured`. Không tự tạo thông số danh nghĩa cho model LDK UER204.
+
+**Ngày:** 2026-10-09
+
+**Vấn đề được giải quyết:** EDA miền tần số cần các tần số lỗi có ý nghĩa vật lý, nhưng context hiện có của dự án XJTU-SY chưa cung cấp bộ giá trị hình học đã được kiểm chứng gồm số con lăn, đường kính vòng chia, đường kính con lăn và góc tiếp xúc.
+
+**Trạng thái hệ thống hiện tại:** Bảng FFT được tính tại 11 mốc vòng đời và đã lưu tần số lấy mẫu, lưới tần số, biên độ, tần số trội, tổng công suất phổ và công suất theo dải. EDA hiện nhận tùy chọn `--bearing-geometry` trỏ tới tệp YAML và lưu nguồn cùng trạng thái cấu hình trong từng dòng FFT và báo cáo EDA.
+
+**Yêu cầu nghiệp vụ/dự án:** Cung cấp BPFO/BPFI/BSF/FTF cho phân tích lỗi về sau; giữ provenance; tránh độ chính xác giả; vẫn cho phép chạy các phần EDA khác trước khi có hình học xác thực; làm mất hiệu lực cache FFT và ảnh khi cấu hình này thay đổi.
+
+**Các phương án đã cân nhắc:** Hard-code một bộ kích thước danh nghĩa của UER204; ước lượng hình học từ đỉnh waveform; bỏ qua toàn bộ tần số đặc trưng; hoặc bắt buộc phải có cấu hình. Không chọn hard-code và ước lượng vì có thể gắn diễn giải vật lý sai cho mọi output. Không bỏ tần số trục vì đây là đại lượng suy ra trực tiếp. Không bắt buộc cấu hình vì sẽ chặn các phần EDA không phụ thuộc vào hình học.
+
+**Lập luận:** Công thức chuẩn dùng tần số trục `fr`, số con lăn `N`, đường kính con lăn `d`, đường kính vòng chia `D` và góc tiếp xúc `theta`: BPFO = `N/2 * fr * (1 - (d/D) cos(theta))`, BPFI = `N/2 * fr * (1 + (d/D) cos(theta))`, BSF = `D/(2d) * fr * (1 - ((d/D) cos(theta))^2)`, FTF = `1/2 * fr * (1 - (d/D) cos(theta))`. Tệp hình học bên ngoài làm cho giả định rõ ràng và có thể kiểm toán; thiếu hình học thì để null thay vì tạo số liệu giả.
+
+**Hệ quả:** Schema FFT có thêm các cột tần số đặc trưng và trạng thái. Người dùng phải điền `configs/xjtu_bearing_geometry.example.yaml` từ nguồn kỹ thuật có thẩm quyền trước khi diễn giải BPFO/BPFI/BSF/FTF bằng số. Các lần chạy không truyền tùy chọn này vẫn hợp lệ cho các thống kê FFT khác, nhưng cần chạy lại để tạo schema mới.
+
+**Điều kiện xem xét lại:** Có bản vẽ ổ bi XJTU-SY hoặc datasheet nhà sản xuất có thẩm quyền; tốc độ trục thay đổi trong một waveform và cần ước lượng tần số theo thời gian; xác nhận model ổ bi khác; hoặc dự án áp dụng mô hình hiệu chỉnh slip/hình học đã được kiểm chứng.

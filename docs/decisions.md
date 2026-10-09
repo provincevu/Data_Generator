@@ -257,3 +257,43 @@ Use a deterministic baseline grouped split for preprocessing: condition 3 is tes
 **Consequences:** Phase 3 produces `xjtu_observation_features.parquet`, `xjtu_snapshot_features.parquet`, `xjtu_feature_scaler.json`, `xjtu_feature_validation.json`, and `xjtu_feature_report.json`. The snapshot table has fixed `D = 30`; normalized vectors can be passed to a baseline model or diffusion prototype. STFT, learned encoders, automatic feature selection, and outlier repair remain future work. The baseline validation/test assignment is a preprocessing convention, not the final model-evaluation fold generator.
 
 **Reconsideration conditions:** A downstream model requires a different channel packing, a validated timestamp-level fault representation, a different sampling-rate regime, rotating evaluation folds, a different normalization family, or evidence that the chosen 15-feature-per-channel schema omits important degradation information. Any such change must version the feature schema and update both decision records.
+
+## IMPORTANT — Make lifecycle generation suitable for health prediction
+
+**Decision:** Treat five requirements as mandatory acceptance criteria for every generated lifecycle used by RUL, health-index, degradation-stage, or failure-prediction models: explicit healthy/FPT/degradation/EOL progression; physically meaningful time- and frequency-domain evolution with periodic impacts; labels synchronized from the generation state; stochastic lifecycle variability with reproducible seeds; and synchronized multi-sensor channels with direction-dependent signal differences.
+
+**Date:** 2026-10-09
+
+**Problem addressed:** A lifecycle generator that only scales healthy amplitude can produce visually plausible files while teaching an AI model shortcuts such as RMS magnitude. It does not provide a learnable transition, physical fault-frequency evidence, aligned targets, realistic variation, or consistent multi-channel behavior.
+
+**Current system state:** The project has XJTU-SY raw observations, metadata, EDA, and feature extraction. The durable requirements for a future synthetic lifecycle generator had not yet been recorded as mandatory project instructions. The canonical raw XJTU layer remains source-backed and must not be confused with synthetic labels.
+
+**Business/project requirements:** Generate data that can support supervised RUL or degradation-stage learning; preserve a healthy baseline; expose FPT and EOL; provide RUL and HI for every sample; create different but reproducible failure scenarios; and represent horizontal/vertical sensors as channels of the same physical lifecycle.
+
+**Alternatives considered:** Accept amplitude-only scaling; impose a single deterministic monotonic degradation curve; generate labels after waveform generation from filenames; create independent sensor channels; or leave physical fault frequencies as an optional visual effect without a periodic impact mechanism. These alternatives were rejected because they encourage shortcut learning, hide state transitions, break label synchronization, violate multi-sensor physics, or make fault-frequency learning impossible.
+
+**Rationale:** The five requirements together constrain the most important failure modes of synthetic predictive-maintenance data. A shared latent health state makes waveform and labels consistent; FPT-based piecewise RUL gives a clear supervised target; periodic impacts and characteristic frequencies provide structure beyond amplitude; stochastic lifetime and noise variation reduce memorization; and shared timing across channels preserves the physical meaning of a multi-sensor observation. Seeds and generation parameters make failures reproducible and auditable.
+
+**Consequences:** Future lifecycle generators must document FPT, EOL, stage, RUL, HI, seed, and generation parameters per sample or lifecycle. They must expose enough time/frequency features to review the transition and must not claim physical accuracy when geometry or calibration is unknown. Any intentional exception requires a new reviewed decision in both language versions. These requirements may increase generator complexity and make naive visual validation insufficient.
+
+**Reconsideration conditions:** A validated real-data study demonstrates that a requirement is irrelevant to the target deployment; a different sensor modality needs a separately defined channel contract; the target task is unsupervised and does not use lifecycle labels; or an authoritative physical model changes the required degradation mechanism. Such a change must preserve the old rationale and explicitly version the replacement.
+
+## IMPORTANT — Make XJTU-SY characteristic bearing frequencies configurable
+
+**Decision:** Add `shaft_frequency_hz`, `bpfo_hz`, `bpfi_hz`, `bsf_hz`, and `ftf_hz` to the XJTU-SY FFT summary. Derive shaft frequency from `rotational_speed_rpm`. Derive BPFO, BPFI, BSF, and FTF only when a complete bearing-geometry YAML is supplied; otherwise keep those four values null and record `geometry_not_configured`. Do not invent nominal geometry values for the LDK UER204 model.
+
+**Date:** 2026-10-09
+
+**Problem addressed:** Frequency-domain EDA needs physically interpretable bearing fault frequencies, but the available XJTU-SY project context does not provide a verified set of rolling-element count, pitch diameter, rolling-element diameter, and contact-angle values.
+
+**Current system state:** The FFT table is calculated at eleven lifecycle anchors and already stores the sampling rate, frequency grid, magnitude, dominant frequency, total spectral power, and band powers. The EDA now accepts an optional `--bearing-geometry` YAML configuration and records its source and configuration status in each FFT row and the EDA report.
+
+**Business/project requirements:** Make BPFO/BPFI/BSF/FTF available for later fault-frequency analysis; preserve provenance; avoid false precision; keep the existing EDA command usable before verified geometry is available; invalidate FFT and plot caches when this configuration changes.
+
+**Alternatives considered:** Hard-code a nominal UER204 geometry; estimate geometry from waveform peaks; omit all characteristic frequencies; or make the configuration mandatory. Hard-coding and estimation were rejected because they could attach an incorrect physical interpretation to every output. Omitting the shaft frequency loses a directly derivable quantity. Making geometry mandatory would unnecessarily block unrelated EDA work.
+
+**Rationale:** The standard formulas use shaft frequency `fr`, rolling-element count `N`, rolling-element diameter `d`, pitch diameter `D`, and contact angle `theta`: BPFO = `N/2 * fr * (1 - (d/D) cos(theta))`, BPFI = `N/2 * fr * (1 + (d/D) cos(theta))`, BSF = `D/(2d) * fr * (1 - ((d/D) cos(theta))^2)`, and FTF = `1/2 * fr * (1 - (d/D) cos(theta))`. A supplied geometry file makes the assumptions explicit and auditable; missing geometry produces null values instead of fabricated numbers.
+
+**Consequences:** The FFT schema has additional characteristic-frequency columns and status fields. Users must fill `configs/xjtu_bearing_geometry.example.yaml` from an authoritative bearing source before interpreting BPFO/BPFI/BSF/FTF numerically. Existing runs without that option remain valid for other FFT statistics, but must be regenerated to populate the new schema.
+
+**Reconsideration conditions:** An authoritative XJTU-SY bearing drawing or manufacturer datasheet becomes available; shaft speed varies within a waveform and requires time-varying frequency estimates; the bearing model is confirmed to differ; or the project adopts a validated slip/geometry correction model.

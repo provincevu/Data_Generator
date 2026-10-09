@@ -29,6 +29,16 @@ Record important project decisions so that their reasoning and context remain av
 
 ### **Response requirements**
 - When responding to me, limit the use of confusing English terms (you may still use English terms if translating them into Vietnamese would result in a loss of meaning). For me, a good conversation is one where both parties understand each other's intent.
+
+### **Mandatory lifecycle-generation requirements**
+
+Before taking any action that implements, edits, tests, reviews, or interprets a lifecycle-data generator, synthetic vibration data, RUL, health index, degradation stages, or failure-prediction labels, read:
+
+- `docs/lifecycle_generation_requirements.md`
+- `docs/lifecycle_generation_requirements_vi.md`
+- the relevant entries in `docs/decisions.md` and `docs/decisions_vi.md`
+
+These requirements are mandatory, not suggestions. The Agent must verify all five requirements—clear healthy/FPT/degradation/EOL progression, physically meaningful time/frequency evolution with periodic impacts, synchronized RUL/HI labels, stochastic variability with reproducible seeds, and consistent multi-sensor channels—before making or approving a change. If a change intentionally violates one of them, stop and record or review an explicit decision in both decision files before continuing.
 ### **XJTU-SY dataset instructions and durable context**
 
 Before performing any task that reads, transforms, labels, analyzes, splits, or models XJTU-SY data, the Agent must read:
