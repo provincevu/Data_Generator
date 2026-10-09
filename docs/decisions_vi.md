@@ -407,3 +407,25 @@ Việc chọn query validation/test dùng seed và được lưu lại để tá
 **Hệ quả:** Training example có số future query thay đổi và target quan sát chính xác. Manifest validation/test phải lưu seed và measurement index tương lai đã chọn. Mã rollout sau này có thể yêu cầu toàn bộ future time quan sát hoặc một danh sách query tùy chỉnh khi không cần target supervision.
 
 **Điều kiện xem xét lại:** Có policy target liên tục/interpolation được kiểm chứng, kiến trúc cần số query cố định hoặc định nghĩa đánh giá full remaining-lifecycle thay đổi. Mọi thay đổi phải tăng phiên bản policy lấy mẫu query.
+
+## IMPORTANT — Mô phỏng context thưa bằng cách thinning observation có seed
+
+**Quyết định:** Định nghĩa sparse simulation là một lớp mask bổ sung trên input context, áp dụng sau khi context dense đã được chọn theo Điểm 1–3. Giữ snapshot anchor bắt buộc. Với mỗi snapshot context khác, giữ độc lập với xác suất `p` bằng seed được lưu lại. Dùng các regime `dense: p=1.00`, `sparse_10: p=0.10`, `sparse_5: p=0.05` và `sparse_1: p=0.01`. Đây là xác suất giữ observation, không phải tỷ lệ phần trăm chính xác bắt buộc. Không tạo timestamp, nội suy, duplicate hoặc renumber observation. Lưu regime, retention probability, seed, số record trước mask, số record sau mask và context mask kết quả.
+
+Các sparse regime ban đầu là điều kiện robustness evaluation. Main training dùng dense regime, trừ khi có quyết định sau bổ sung sparse augmentation. Số context sau mask có thể dưới 3 hoặc dưới 10; các example này chỉ nằm trong báo cáo robustness có nhãn và không được âm thầm trộn vào protocol chính. Future query target vẫn là target tương lai đã quan sát theo Điểm 4 và không bị sparse simulator làm thưa.
+
+**Ngày:** 2026-10-10
+
+**Vấn đề được giải quyết:** Dự án cần đo hiệu năng khi history monitoring thưa và không đều mà không tạo observation giả hoặc nhầm lẫn giữa input context bị thiếu với future target có supervision bị thiếu.
+
+**Trạng thái hệ thống hiện tại:** Điểm 1–3 định nghĩa context dense gồm anchor, predecessor gần nhất và các observation bổ sung random. Điểm 2 định nghĩa regime `K` chính và context ngắn. Điểm 4 định nghĩa future query từ snapshot tương lai đã quan sát.
+
+**Yêu cầu nghiệp vụ/dự án:** Giữ chronology nguồn; mô phỏng context thiếu thực tế; làm sparse condition tái lập được; phân biệt availability của input với availability của target; báo cáo sparsity cực đoan riêng với protocol chính.
+
+**Các phương án đã cân nhắc:** Tạo timestamp irregular mới hoặc nội suy observation bị drop, không chọn vì tạo dữ liệu giả. Ép mọi sparse regime giữ tối thiểu 10 record, không chọn vì không còn đại diện cho điều kiện quan sát 10%, 5% và 1%. Làm thưa cả future target cùng context, không chọn vì sẽ đo khả năng có nhãn chứ không đo khả năng dự báo từ history thưa. Đưa sparse augmentation vào main training ngay, tạm hoãn để đánh giá giá trị trước.
+
+**Lập luận:** Áp dụng thinning sau khi chọn context dense biến sparsity thành phép corruption rõ ràng và có thể audit chỉ trên input. Giữ anchor bảo toàn truy vấn trạng thái hiện tại. Giữ độc lập có seed đơn giản, tái lập và tạo subset không đều thật. Báo cáo robustness riêng ngăn các trường hợp chỉ còn một record hoặc chỉ còn anchor định nghĩa lại bài toán causal chính.
+
+**Hệ quả:** Robustness sparse có thể tạo dưới 3 context dù protocol chính yêu cầu tối thiểu 10; phải báo cáo số record sau mask và mask thực tế. Điểm 3 vẫn là quy tắc context dense nền, còn Điểm 5 là stress test riêng về availability của observation. Future target vẫn là feature vector quan sát chính xác.
+
+**Điều kiện xem xét lại:** Validation cho thấy cần sparse augmentation trong main training, có quy trình missingness thực tế từ deployment, hoặc cần mô hình hóa riêng việc thiếu future target. Mọi thay đổi phải tăng phiên bản sparse regime và policy mask.

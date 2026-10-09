@@ -406,3 +406,25 @@ Validation/test query selection is seeded and persisted for reproducibility. Ful
 **Consequences:** Training examples contain a variable number of future queries with exact observed targets. Validation/test manifests must store seeds and selected future measurement indices. Later rollout code can request all future observed times or a custom query list only where targets are not required for supervised training.
 
 **Reconsideration conditions:** A validated interpolation/continuous-time target policy is introduced, the model architecture requires a fixed query count, or the project changes the evaluation definition of full remaining-lifecycle prediction. Any change must version the query-sampling policy.
+
+## IMPORTANT — Simulate sparse context by seeded observation thinning
+
+**Decision:** Define sparse simulation as an additional input-context masking layer applied after the dense context has been selected by Points 1–3. Keep the anchor snapshot unconditionally. For every other selected context snapshot, independently retain it with probability `p` using a recorded seed. Use the regimes `dense: p=1.00`, `sparse_10: p=0.10`, `sparse_5: p=0.05`, and `sparse_1: p=0.01`. Treat these as retention probabilities, not guaranteed exact percentages. Do not create timestamps, interpolate, duplicate, or renumber observations. Record the regime, retention probability, seed, pre-mask count, post-mask count, and resulting context mask.
+
+Sparse regimes are robustness-evaluation conditions in the initial implementation. Main training uses the dense regime unless a later decision adds sparse augmentation. The post-mask context count may fall below 3 or 10; such examples are retained only for the labeled sparse robustness report and are not silently mixed into the main protocol. Future query targets remain the observed future targets defined by Point 4 and are not thinned by this context simulator.
+
+**Date:** 2026-10-10
+
+**Problem addressed:** The project needs to measure performance when the monitoring history is sparse and irregular without fabricating observations or confusing missing input context with missing supervised future targets.
+
+**Current system state:** Points 1–3 define a dense context with an anchor, a recent predecessor, and random additional observations. Point 2 defines the main and short-context `K` regimes. Point 4 defines future queries from observed future snapshots.
+
+**Business/project requirements:** Preserve source chronology; simulate realistic missing context; make sparse conditions reproducible; retain the distinction between input availability and target availability; report extreme sparsity separately from the main protocol.
+
+**Alternatives considered:** Create new irregular timestamps or interpolate dropped observations, rejected because they fabricate data. Force every sparse regime to keep at least 10 records, rejected because it would no longer represent the requested 10%, 5%, and 1% observation conditions. Thin future targets together with context, rejected because it would measure label availability rather than the model's ability to forecast from sparse history. Use sparse augmentation in main training immediately, deferred because its value should be evaluated first.
+
+**Rationale:** Applying thinning after dense context selection makes sparsity an explicit, auditable corruption of the input only. Keeping the anchor preserves the current-state query. Seeded independent retention is simple, reproducible, and produces genuinely irregular subsets. Separate robustness reports prevent extreme one-record or anchor-only cases from redefining the main causal task.
+
+**Consequences:** Sparse evaluation can produce fewer than 3 context records even though the main protocol requires at least 10; the actual post-mask count and mask must be reported. Point 3 remains the dense base-context rule, while Point 5 is an additional observation-availability stress test. Future targets remain exact observed feature vectors.
+
+**Reconsideration conditions:** Validation shows that sparse augmentation is necessary for main training, a real deployment missingness process becomes available, or future-target missingness must be modeled explicitly. Any change must version the sparse regime and mask policy.
