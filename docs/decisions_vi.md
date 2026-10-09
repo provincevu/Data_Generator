@@ -355,3 +355,7 @@ Snapshot anchor thuộc history với `lag_sec = 0`. Các record history dùng `
 **Hệ quả:** Task 4.2 tạo manifest anchor tái lập được, chưa tạo window dùng trực tiếp cho mô hình. Trajectory dài không tự động đóng góp nhiều anchor hơn nếu ngân sách anchor theo bearing không cho phép. Các task sau phải dùng manifest để tạo history/future sequence, giữ measurement index nguồn và giữ mọi record dẫn xuất trong đúng split.
 
 **Điều kiện xem xét lại:** Task sau cần query time tùy ý, có chính sách nội suy được kiểm chứng, protocol thay đổi minimum history hoặc đánh giá cần thiết kế lấy mẫu anchor khác. Mọi thay đổi phải tăng phiên bản schema manifest và chính sách lấy mẫu.
+
+### Làm rõ — Điểm 1: context gần đây và target toàn bộ lifecycle còn lại
+
+Cụm “dự đoán toàn bộ lifecycle” nghĩa là dự đoán toàn bộ trajectory còn lại sau `t_anchor`, không tái tạo các observation trước anchor. Vì vậy input context được giới hạn ở tối đa 20 snapshot thực tế gần `t_anchor` nhất trong `[t_anchor - 1800, t_anchor]`, có cả anchor và yêu cầu tối thiểu 10 record cho protocol chính. Giới hạn input này không giới hạn future target: task sau có thể cung cấp toàn bộ snapshot tương lai từ ngay sau anchor đến endpoint của trajectory hoặc `END_OF_TRAJECTORY`.

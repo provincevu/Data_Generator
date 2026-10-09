@@ -354,3 +354,7 @@ The anchor snapshot is part of the history with `lag_sec = 0`. History records u
 **Consequences:** Task 4.2 produces a reproducible anchor manifest rather than model-ready windows. Long trajectories no longer automatically contribute more anchors unless the configured per-bearing sample budget permits it. Later tasks must consume the manifest to construct history and future sequences, preserve source measurement indices, and keep all derived records within the assigned split.
 
 **Reconsideration conditions:** A downstream task requires arbitrary query times, a validated interpolation policy becomes available, the minimum-history protocol changes, or evaluation requires a different anchor sampling design. Any change must version the anchor manifest schema and sampling policy.
+
+### Clarification — Point 1: recent context pool versus full remaining-lifecycle target
+
+The phrase “full lifecycle prediction” means predicting the complete remaining trajectory after `t_anchor`, not reconstructing observations before the anchor. The input context is therefore limited to at most 20 actual snapshots nearest to `t_anchor` within `[t_anchor - 1800, t_anchor]`, including the anchor and requiring at least 10 records for the main protocol. This input limit does not limit the future target: a later task may expose all observed future snapshots from immediately after the anchor through the trajectory endpoint or `END_OF_TRAJECTORY`.
