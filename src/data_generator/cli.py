@@ -32,6 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
     eda.add_argument("--output-dir", type=Path)
     eda.add_argument("--plot-dir", type=Path)
     eda.add_argument("--no-plots", action="store_true")
+    eda.add_argument("--force-recompute", action="store_true")
     return parser
 
 
@@ -58,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
         manifest = args.manifest or project_root / "data/interim/xjtu/xjtu_source_manifest.parquet"
         trajectory_metadata = args.trajectory_metadata or project_root / "data/interim/xjtu/xjtu_trajectory_metadata.parquet"
         output_dir = args.output_dir or project_root / "data/interim/xjtu"
-        report = run_xjtu_eda(observations, manifest, trajectory_metadata, output_dir, plot_dir=args.plot_dir, make_plots=not args.no_plots)
+        report = run_xjtu_eda(observations, manifest, trajectory_metadata, output_dir, plot_dir=args.plot_dir, make_plots=not args.no_plots, force_recompute=args.force_recompute)
         print(json.dumps(report["summary"], ensure_ascii=False, indent=2))
         return 0
     return 2

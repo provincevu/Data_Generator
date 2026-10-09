@@ -55,6 +55,9 @@ def test_xjtu_eda_writes_time_summary_and_eleven_fft_anchors(tmp_path):
     assert all(len(row["frequencies_hz"]) == 17 for row in fft_rows)
     saved_report = json.loads((interim / "xjtu_eda_report.json").read_text(encoding="utf-8"))
     assert saved_report["configuration"]["fft_window"] == "Hann"
+    cached_report = run_xjtu_eda(observations, manifest, trajectory, interim, make_plots=False)
+    assert cached_report["cache"]["used"]["time_summary"] is True
+    assert cached_report["cache"]["used"]["fft_summary"] is True
 
 def test_signal_metric_definitions_match_project_contract():
     from data_generator.eda.xjtu import _signal_metrics

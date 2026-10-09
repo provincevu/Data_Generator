@@ -205,3 +205,23 @@ Observation {
 **Consequences:** Existing xjtu_signal_summary.parquet must be regenerated after implementation changes. Downstream users must not interpret kurtosis as excess kurtosis.
 
 **Reconsideration conditions:** A later analysis explicitly requires unbiased sample estimators or excess kurtosis; then introduce a separately named field rather than changing this field silently.
+
+## IMPORTANT — Cache reusable XJTU-SY EDA stages and use Vietnamese plot labels
+
+**Decision:** The XJTU-SY EDA pipeline stores a cache manifest at xjtu_eda_cache.json. It independently caches the time-summary Parquet, the FFT-summary Parquet, and the seven static plots. Each cache entry is reused only when its input file signatures and stage version/configuration match; changing one stage invalidates only that stage and downstream plots. Add a force-recompute option for intentional invalidation. Static plot titles, axes, legends, and explanatory notes are Vietnamese while identifiers and standard metric names remain recognizable.
+
+**Date:** 2026-10-09
+
+**Problem addressed:** Re-running EDA after a plotting or label change unnecessarily reread the 1.91 GB waveform Parquet, and English-only labels made the figures harder to interpret.
+
+**Current system state:** The EDA has time summaries for all observations, FFT summaries at 11 anchors, and static lifecycle/FFT/lifetime plots. The cache manifest records stage keys based on input size/modified time and stage configuration versions.
+
+**Business/project requirements:** Make iterative EDA development practical on the local dataset, avoid silently using stale results, explain figures in Vietnamese, and preserve an explicit escape hatch for a full rebuild.
+
+**Alternatives considered:** Recompute every stage on every run; cache only the final report; use one global cache key; or reuse outputs solely because files exist. These alternatives waste resources or risk stale or partial outputs.
+
+**Rationale:** Stage-level keys allow a plot-only change to reuse both Parquet summaries, while a raw-data or metric-definition change invalidates the time summary and its downstream stages. File signatures are cheaper than hashing the 1.91 GB input on every invocation; stage versions/configuration provide explicit invalidation for code changes. Vietnamese labels and short notes make the figures usable without translating every axis manually.
+
+**Consequences:** The first run still processes the full raw-derived Parquet. A changed implementation must update its stage version/configuration or use force-recompute. A deleted or mismatched cache causes the affected stage to rebuild. Plot files are still ignored by Git.
+
+**Reconsideration conditions:** Inputs are stored on a filesystem where size and modified time are unreliable; concurrent EDA writers need coordination; or the cache must be portable across machines, in which case content hashes and environment fingerprints may be required.

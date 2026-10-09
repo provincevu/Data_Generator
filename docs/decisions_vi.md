@@ -206,3 +206,23 @@ Observation {
 **Hệ quả:** Phải tạo lại xjtu_signal_summary.parquet sau khi thay đổi mã. Người dùng sau này không được hiểu kurtosis là excess kurtosis.
 
 **Điều kiện xem xét lại:** Phân tích sau này yêu cầu ước lượng không chệch cho mẫu hoặc excess kurtosis; khi đó phải thêm trường có tên riêng thay vì âm thầm đổi nghĩa trường hiện tại.
+
+## IMPORTANT — Cache các giai đoạn EDA XJTU-SY và dùng nhãn biểu đồ tiếng Việt
+
+**Quyết định:** Pipeline EDA XJTU-SY lưu manifest cache tại xjtu_eda_cache.json. Pipeline cache độc lập bảng Parquet thống kê miền thời gian, bảng Parquet FFT và bảy ảnh tĩnh. Mỗi cache chỉ được dùng lại khi chữ ký file input và phiên bản/cấu hình của giai đoạn khớp; thay đổi một giai đoạn chỉ làm mất hiệu lực giai đoạn đó và các biểu đồ phía sau. Có tùy chọn buộc tính lại khi cần. Tiêu đề, trục, chú thích và ghi chú giải thích trên ảnh dùng tiếng Việt; tên định danh và tên metric chuẩn vẫn được giữ để dễ đối chiếu.
+
+**Ngày:** 2026-10-09
+
+**Vấn đề được giải quyết:** Chạy lại EDA sau mỗi thay đổi biểu đồ hoặc nhãn khiến pipeline đọc lại Parquet waveform 1,91 GB không cần thiết; nhãn chỉ bằng tiếng Anh cũng khó diễn giải.
+
+**Trạng thái hệ thống hiện tại:** EDA có thống kê miền thời gian cho mọi Observation, FFT tại 11 mốc và các biểu đồ lifecycle/FFT/lifetime. Manifest cache ghi khóa theo chữ ký size/thời gian sửa đổi của input và phiên bản cấu hình từng giai đoạn.
+
+**Yêu cầu nghiệp vụ/dự án:** Làm cho việc phát triển EDA lặp lại trên dữ liệu local thực tế nhanh hơn, không dùng âm thầm kết quả cũ, giải thích được ảnh bằng tiếng Việt và vẫn có cách buộc dựng lại toàn bộ.
+
+**Các phương án đã cân nhắc:** Tính lại mọi giai đoạn mỗi lần chạy; chỉ cache báo cáo cuối; dùng một khóa chung cho mọi giai đoạn; hoặc chỉ cần thấy file tồn tại là dùng lại. Các phương án này lãng phí tài nguyên hoặc có nguy cơ dùng output cũ/dở dang.
+
+**Lập luận:** Khóa theo từng giai đoạn cho phép thay đổi biểu đồ mà vẫn dùng lại hai bảng Parquet; thay đổi dữ liệu raw hoặc định nghĩa metric sẽ làm mới bảng miền thời gian và các giai đoạn sau. Chữ ký file rẻ hơn việc băm toàn bộ input 1,91 GB ở mỗi lần chạy; phiên bản/cấu hình giai đoạn cung cấp cơ chế vô hiệu hóa rõ ràng khi mã thay đổi. Nhãn tiếng Việt và ghi chú ngắn giúp đọc ảnh mà không phải tự dịch từng trục.
+
+**Hệ quả:** Lần chạy đầu vẫn phải xử lý đầy đủ Parquet đầu vào. Nếu thay đổi cách tính, phải tăng phiên bản/cấu hình giai đoạn hoặc dùng tùy chọn buộc tính lại. Cache bị xóa hoặc không khớp sẽ khiến giai đoạn tương ứng chạy lại. Các ảnh vẫn được Git bỏ qua.
+
+**Điều kiện xem xét lại:** Filesystem làm size hoặc thời gian sửa đổi không đáng tin cậy; cần hỗ trợ nhiều tiến trình EDA chạy đồng thời; hoặc cache phải di chuyển giữa nhiều máy, khi đó có thể cần băm nội dung và ghi fingerprint môi trường.
