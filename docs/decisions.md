@@ -225,3 +225,35 @@ Observation {
 **Consequences:** The first run still processes the full raw-derived Parquet. A changed implementation must update its stage version/configuration or use force-recompute. A deleted or mismatched cache causes the affected stage to rebuild. Plot files are still ignored by Git.
 
 **Reconsideration conditions:** Inputs are stored on a filesystem where size and modified time are unreliable; concurrent EDA writers need coordination; or the cache must be portable across machines, in which case content hashes and environment fingerprints may be required.
+
+## IMPORTANT — Fix the XJTU-SY Phase 3 feature schema and leakage-safe preprocessing
+
+**Decision:** Define feature schema version `xjtu_feature_v1` as 15 scalar features per channel, ordered as `mean`, `std`, `rms`, `peak_abs`, `peak_to_peak`, `kurtosis`, `crest_factor`, `dominant_frequency_hz`, `dominant_amplitude`, `total_spectral_power`, `spectral_entropy`, `band_power_0_1000_hz`, `band_power_1000_5000_hz`, `band_power_5000_10000_hz`, and `band_power_10000_12800_hz`. Define each physical snapshot vector as horizontal features followed by vertical features, so `D = 30`. Keep the raw contract one row per channel; the derived snapshot feature table has one row per bearing × measurement and carries channel-presence and feature-validity masks.
+
+Compute the scalar spectral features for every observation using the existing mean-centering and Hann-window policy. Spectral entropy is normalized Shannon entropy of the windowed one-sided power spectrum. Do not add STFT to Phase 3.
+
+Use a deterministic baseline grouped split for preprocessing: condition 3 is test; `Bearing1_5` and `Bearing2_5` are validation; all other bearings are train. Fit per-feature z-score statistics using finite values from train bearings only. Missing or undefined values are replaced by the train mean before scaling and are marked by masks; do not clip or delete outliers automatically.
+
+**Date:** 2026-10-09
+
+**Problem addressed:** The project had interpretable time-domain and anchor-only FFT EDA, but no fixed-dimensional feature vector for every snapshot, no spectral entropy, and no leakage-safe normalization or automated feature-quality report before modeling.
+
+**Current system state:** Raw XJTU-SY observations, metadata, time summaries, and 11-anchor FFT summaries exist. The new derived feature pipeline creates per-channel features for every observation, a 30-dimensional per-snapshot table, a train-only scaler, and a validation report covering non-finite values, constants, robust outliers, and high correlations.
+
+**Business/project requirements:** Finish the debug-friendly feature-space MVP before diffusion; preserve raw waveform provenance; make every snapshot comparable in a fixed feature space; prevent validation/test distribution from affecting preprocessing; retain enough masks and reports to audit missing or undefined values.
+
+**Alternatives considered:**
+1. Keep variable-length FFT arrays as model inputs. Rejected because they do not define a fixed `D` when waveform length varies.
+2. Compute spectral features only at the 11 EDA anchors. Rejected for model features because the model needs a representation for every snapshot.
+3. Add STFT immediately. Deferred because the initial fixed-window FFT and band features are sufficient for the MVP and the project explicitly treats STFT as a later upgrade.
+4. Fit normalization on all trajectories. Rejected because it leaks validation/test distribution information.
+5. Automatically remove outliers or correlated features. Rejected because the first validation stage should report evidence without silently changing raw-derived information.
+6. Use a single channel-combined raw Observation. Rejected because the canonical raw contract preserves one row per channel; channel packing belongs only to the derived snapshot layer.
+
+**Rationale:** Fifteen scalar features per channel cover the already-approved time statistics and the first spectral summary while remaining deterministic and auditable. Concatenating the two documented channels produces a stable 30-dimensional snapshot vector without changing raw provenance. The baseline split follows the project requirement for bearing/condition grouping and leaves a clear path to later rotating leave-one-condition-out folds. Train-only z-score scaling is simple, reproducible, and does not destroy amplitude information through clipping. Masks make imputation explicit rather than hiding missing or mathematically undefined values.
+
+**Evidence and assumptions:** The XJTU-SY source documents horizontal and vertical channels, 25.6 kHz sampling, and approximately 32,768 samples per measurement. Existing project decisions already fix mean-centering, Hann preprocessing, four frequency bands, raw Pearson kurtosis, and crest-factor definitions. Current data has both channels for every parsed measurement; mask behavior is included for future incomplete inputs.
+
+**Consequences:** Phase 3 produces `xjtu_observation_features.parquet`, `xjtu_snapshot_features.parquet`, `xjtu_feature_scaler.json`, `xjtu_feature_validation.json`, and `xjtu_feature_report.json`. The snapshot table has fixed `D = 30`; normalized vectors can be passed to a baseline model or diffusion prototype. STFT, learned encoders, automatic feature selection, and outlier repair remain future work. The baseline validation/test assignment is a preprocessing convention, not the final model-evaluation fold generator.
+
+**Reconsideration conditions:** A downstream model requires a different channel packing, a validated timestamp-level fault representation, a different sampling-rate regime, rotating evaluation folds, a different normalization family, or evidence that the chosen 15-feature-per-channel schema omits important degradation information. Any such change must version the feature schema and update both decision records.

@@ -226,3 +226,35 @@ Observation {
 **Hệ quả:** Lần chạy đầu vẫn phải xử lý đầy đủ Parquet đầu vào. Nếu thay đổi cách tính, phải tăng phiên bản/cấu hình giai đoạn hoặc dùng tùy chọn buộc tính lại. Cache bị xóa hoặc không khớp sẽ khiến giai đoạn tương ứng chạy lại. Các ảnh vẫn được Git bỏ qua.
 
 **Điều kiện xem xét lại:** Filesystem làm size hoặc thời gian sửa đổi không đáng tin cậy; cần hỗ trợ nhiều tiến trình EDA chạy đồng thời; hoặc cache phải di chuyển giữa nhiều máy, khi đó có thể cần băm nội dung và ghi fingerprint môi trường.
+
+## IMPORTANT — Chốt schema feature Phase 3 và tiền xử lý không rò rỉ cho XJTU-SY
+
+**Quyết định:** Định nghĩa schema feature phiên bản `xjtu_feature_v1` gồm 15 đặc trưng vô hướng cho mỗi kênh, theo thứ tự `mean`, `std`, `rms`, `peak_abs`, `peak_to_peak`, `kurtosis`, `crest_factor`, `dominant_frequency_hz`, `dominant_amplitude`, `total_spectral_power`, `spectral_entropy`, `band_power_0_1000_hz`, `band_power_1000_5000_hz`, `band_power_5000_10000_hz` và `band_power_10000_12800_hz`. Vector của mỗi snapshot vật lý nối đặc trưng horizontal trước rồi đến vertical, nên `D = 30`. Hợp đồng raw vẫn giữ một dòng cho mỗi kênh; bảng feature snapshot dẫn xuất có một dòng cho mỗi bearing × measurement và mang theo mask kênh hiện diện và mask feature hợp lệ.
+
+Tính các đặc trưng phổ vô hướng cho mọi observation bằng chính sách đã chốt: trừ trung bình và dùng cửa sổ Hann. Spectral entropy là entropy Shannon đã chuẩn hóa của phổ công suất một phía sau cửa sổ. Không thêm STFT vào Phase 3.
+
+Dùng split baseline theo nhóm, tất định cho tiền xử lý: condition 3 là test; `Bearing1_5` và `Bearing2_5` là validation; các bearing còn lại là train. Tính thống kê z-score theo từng feature chỉ từ các giá trị hữu hạn của bearing train. Giá trị thiếu hoặc không xác định được thay bằng mean của train trước khi chuẩn hóa và được đánh dấu bằng mask; không tự động cắt hay xóa outlier.
+
+**Ngày:** 2026-10-09
+
+**Vấn đề được giải quyết:** Dự án đã có EDA miền thời gian và FFT tại các anchor, nhưng chưa có vector feature cố định chiều cho mọi snapshot, chưa có spectral entropy và chưa có chuẩn hóa không rò rỉ hoặc báo cáo tự động về chất lượng feature trước khi mô hình hóa.
+
+**Trạng thái hệ thống hiện tại:** Đã có observation raw XJTU-SY, metadata, thống kê miền thời gian và FFT tại 11 anchor. Pipeline feature mới tạo feature cho từng observation, bảng snapshot 30 chiều, scaler chỉ học từ train và báo cáo validation gồm giá trị không hữu hạn, feature hằng, outlier robust và tương quan cao.
+
+**Yêu cầu nghiệp vụ/dự án:** Hoàn thành MVP feature-space dễ debug trước diffusion; giữ provenance của waveform raw; làm cho mọi snapshot so sánh được trong không gian cố định; ngăn phân phối validation/test ảnh hưởng preprocessing; giữ đủ mask và báo cáo để kiểm toán giá trị thiếu hoặc không xác định.
+
+**Các phương án đã cân nhắc:**
+1. Dùng mảng FFT có độ dài thay đổi làm input mô hình. Không chọn vì không xác định được `D` cố định khi độ dài waveform thay đổi.
+2. Chỉ tính feature phổ tại 11 anchor EDA. Không chọn cho feature mô hình vì mô hình cần biểu diễn cho mọi snapshot.
+3. Thêm STFT ngay. Tạm hoãn vì FFT và band feature hiện tại đủ cho MVP; quyết định dự án đã coi STFT là nâng cấp sau.
+4. Fit chuẩn hóa trên toàn bộ trajectory. Không chọn vì làm rò rỉ phân phối validation/test.
+5. Tự động xóa outlier hoặc feature tương quan cao. Không chọn vì giai đoạn validation đầu tiên cần báo cáo bằng chứng, không âm thầm thay đổi thông tin sinh từ raw.
+6. Gộp hai kênh thành một Observation raw. Không chọn vì hợp đồng raw chuẩn phải giữ một dòng mỗi kênh; việc đóng gói hai kênh chỉ thuộc lớp snapshot dẫn xuất.
+
+**Lập luận:** Mười lăm feature cho mỗi kênh bao phủ các thống kê miền thời gian đã chốt và phần tóm tắt phổ đầu tiên, đồng thời vẫn tất định và dễ kiểm toán. Nối hai kênh đã được tài liệu hóa tạo ra vector snapshot 30 chiều ổn định mà không thay đổi provenance raw. Split baseline giữ đúng yêu cầu tách theo bearing/condition và vẫn cho phép bổ sung các fold leave-one-condition-out xoay vòng sau này. Z-score chỉ học từ train đơn giản, tái lập được và không làm mất biên độ bằng clipping. Mask làm cho việc điền giá trị thiếu hoặc không xác định trở nên rõ ràng.
+
+**Bằng chứng và giả định:** Tài liệu XJTU-SY ghi nhận hai kênh horizontal/vertical, tần số lấy mẫu 25,6 kHz và khoảng 32.768 mẫu mỗi measurement. Các quyết định trước đã chốt mean-centering, cửa sổ Hann, bốn dải tần, kurtosis Pearson raw và crest factor. Dữ liệu hiện tại có đủ hai kênh ở mọi measurement đã parse; hành vi mask được giữ cho các input thiếu trong tương lai.
+
+**Hệ quả:** Phase 3 tạo `xjtu_observation_features.parquet`, `xjtu_snapshot_features.parquet`, `xjtu_feature_scaler.json`, `xjtu_feature_validation.json` và `xjtu_feature_report.json`. Bảng snapshot có `D = 30`; vector đã chuẩn hóa có thể đưa vào baseline hoặc prototype diffusion. STFT, encoder học được, chọn feature tự động và sửa outlier vẫn là việc tương lai. Việc gán train/validation/test này là quy ước preprocessing baseline, không phải bộ sinh fold đánh giá cuối cùng.
+
+**Điều kiện xem xét lại:** Mô hình phía sau cần cách đóng gói kênh khác, có nhãn timestamp-level được kiểm chứng, có chế độ sampling khác, cần các fold đánh giá xoay vòng, cần họ chuẩn hóa khác hoặc có bằng chứng schema 15 feature/kênh bỏ sót thông tin suy giảm quan trọng. Mọi thay đổi phải tăng phiên bản schema feature và cập nhật cả hai decision record.

@@ -1,4 +1,4 @@
-"""Command-line entry points for data ingestion and EDA."""
+"""Command-line entry points for data ingestion, features, and EDA."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from .eda.xjtu import run_xjtu_eda
+from .features.xjtu import run_xjtu_features
 from .ingestion.metadata import build_xjtu_metadata
 from .ingestion.xjtu import parse_xjtu
 
@@ -24,6 +25,10 @@ def build_parser() -> argparse.ArgumentParser:
     metadata.add_argument("--metadata-config", type=Path)
     metadata.add_argument("--manifest", type=Path)
     metadata.add_argument("--output-dir", type=Path)
+    features = subparsers.add_parser("features-xjtu", help="build fixed-dimensional XJTU-SY features")
+    features.add_argument("--project-root", type=Path, default=Path.cwd())
+    features.add_argument("--observations", type=Path)
+    features.add_argument("--output-dir", type=Path)
     eda = subparsers.add_parser("eda-xjtu", help="run XJTU-SY exploratory data analysis")
     eda.add_argument("--project-root", type=Path, default=Path.cwd())
     eda.add_argument("--observations", type=Path)
@@ -52,6 +57,12 @@ def main(argv: list[str] | None = None) -> int:
         manifest = args.manifest or project_root / "data/interim/xjtu/xjtu_source_manifest.parquet"
         output_dir = args.output_dir or project_root / "data/interim/xjtu"
         report = build_xjtu_metadata(metadata_config, manifest, output_dir)
+        print(json.dumps(report["summary"], ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "features-xjtu":
+        observations = args.observations or project_root / "data/interim/xjtu/xjtu_observations.parquet"
+        output_dir = args.output_dir or project_root / "data/interim/xjtu"
+        report = run_xjtu_features(observations, output_dir)
         print(json.dumps(report["summary"], ensure_ascii=False, indent=2))
         return 0
     if args.command == "eda-xjtu":
