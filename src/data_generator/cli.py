@@ -1,4 +1,4 @@
-﻿"""Command-line entry points for data ingestion, features, EDA, and sampling."""
+"""Command-line entry points for data ingestion, features, EDA, sampling, and baselines."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .baselines.causal import run_baseline_evaluation
 from .eda.xjtu import run_xjtu_eda
 from .features.xjtu import run_xjtu_features
 from .ingestion.metadata import build_xjtu_metadata
@@ -41,6 +42,13 @@ def build_parser() -> argparse.ArgumentParser:
     sampler.add_argument("--context-regime", choices=("main", "short_robustness"), default="main")
     sampler.add_argument("--sparse-regime", choices=("dense", "sparse_10", "sparse_5", "sparse_1"), default="dense")
     sampler.add_argument("--full-remaining-lifecycle", action="store_true")
+    baseline = subparsers.add_parser("baseline-xjtu", help="fit and evaluate causal baseline models")
+    baseline.add_argument("--project-root", type=Path, default=Path.cwd())
+    baseline.add_argument("--snapshot-features", type=Path)
+    baseline.add_argument("--train-manifest", type=Path, required=True)
+    baseline.add_argument("--eval-manifest", type=Path, nargs="+", required=True)
+    baseline.add_argument("--output-dir", type=Path)
+    baseline.add_argument("--random-state", type=int, default=0)
     eda = subparsers.add_parser("eda-xjtu", help="run XJTU-SY exploratory data analysis")
     eda.add_argument("--project-root", type=Path, default=Path.cwd())
     eda.add_argument("--observations", type=Path)
@@ -94,6 +102,24 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(json.dumps(report["summary"], ensure_ascii=False, indent=2))
         return 0
+    if args.command == "baseline-xjtu":
+        snapshot_features = args.snapshot_features or project_root / "data/interim/xjtu/xjtu_snapshot_features.parquet"
+        output_dir = args.output_dir or project_root / "data/interim/xjtu/baselines"
+        report = run_baseline_evaluation(
+            snapshot_features,
+            args.train_manifest,
+            args.eval_manifest,
+            output_dir,
+            random_state=args.random_state,
+        )
+        print(json.dumps({
+            "status": report["status"],
+            "models": report["models"],
+            "metrics_path": report["metrics_path"],
+            "training_samples": report["training_samples"],
+            "evaluation_manifests": report["evaluation_manifests"],
+        }, ensure_ascii=False, indent=2))
+        return 0
     if args.command == "eda-xjtu":
         observations = args.observations or project_root / "data/interim/xjtu/xjtu_observations.parquet"
         manifest = args.manifest or project_root / "data/interim/xjtu/xjtu_source_manifest.parquet"
@@ -116,3 +142,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
