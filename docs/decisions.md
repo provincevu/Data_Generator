@@ -325,3 +325,32 @@ Keep `measurement_index` and `elapsed_time_sec` from the source chronology. Miss
 **Consequences:** Task 4.1 outputs a canonical long trajectory table and may output derived per-bearing sequence artifacts. Later tasks may create causal history windows, future targets, padding masks, and batch tensors from this representation without changing its chronology. Storage and batching must handle variable `N_b`; complete trajectories must be split before those derived artifacts are created.
 
 **Reconsideration conditions:** A future dataset requires a different atomic unit, a validated common time grid becomes necessary for a specific downstream task, or a model requires lossless multi-channel tensor packing that cannot be represented by the current derived sequence format. Any change must preserve the long-table source or introduce a versioned replacement.
+
+## IMPORTANT — Sample causal random anchors at observed XJTU-SY snapshots
+
+**Decision:** For Task 4.2, choose `t_anchor` only from valid observed snapshots, not from continuous times between measurements. An eligible anchor must have at least 10 valid snapshots, including the anchor snapshot, within the previous 1,800 seconds and at least one observed snapshot after the anchor. Build the eligible-anchor list separately for each complete bearing trajectory after applying the trajectory split. Sample within each bearing so long trajectories do not dominate the anchor distribution. Use deterministic seeds for validation/test and a reproducible `base_seed + epoch` policy for training. Persist an `anchor_manifest.parquet` containing the trajectory identity, split, anchor identity, source measurement index, anchor elapsed time, history/future counts, and sampling seed.
+
+The anchor snapshot is part of the history with `lag_sec = 0`. History records use `lag_sec = elapsed_time_sec - anchor_elapsed_time_sec`; missing measurements remain temporal gaps and are not interpolated or renumbered. Task 4.2 selects anchors only; construction of history and future target sequences is a later task.
+
+**Date:** 2026-10-10
+
+**Problem addressed:** The full trajectory representation needs a reproducible way to select causal training/evaluation query points without fabricating timestamps, over-sampling long trajectories, or allowing anchors to cross split boundaries.
+
+**Current system state:** Task 4.1 defines a variable-length trajectory of fixed-dimensional snapshot vectors. XJTU-SY snapshots are approximately one minute apart but may contain real missing-measurement gaps. The causal protocol requires at least 10 records from the previous 30 minutes and predicts only records after the anchor.
+
+**Business/project requirements:** Preserve irregular chronology; create enough random query points for training; keep validation/test reproducible; give each bearing a fair opportunity to contribute; ensure every anchor has usable history and a non-empty future; prevent split and future information leakage.
+
+**Alternatives considered:**
+1. Sample arbitrary continuous times. Rejected because the anchor would not correspond to an observed feature snapshot and would require interpolation or an ambiguous current state.
+2. Sample uniformly across all dataset snapshots. Rejected because long trajectories would dominate the training distribution.
+3. Accept anchors with fewer than 10 history records. Rejected because the main protocol requires a minimum history; short contexts belong to a separate robustness evaluation.
+4. Select anchors before applying trajectory splits. Rejected because it complicates leakage auditing and can mix split-specific artifacts.
+5. Generate history and targets inside the anchor sampler. Rejected because anchor selection and sample construction should remain independently testable.
+
+**Rationale:** Observed-snapshot anchors preserve the source time semantics and make `X_anchor` directly available. Per-bearing eligibility and sampling balance the 15 physical trajectories despite large lifetime differences. Seeded sampling gives reproducible validation/test results while allowing training diversity across epochs. Requiring a future record prevents empty targets without changing model inputs; future availability is used only for offline sample construction.
+
+**Evidence and assumptions:** XJTU-SY records one CSV approximately every minute, the project defines `elapsed_time_sec` from the numeric source measurement, and the causal forecasting decision fixes a maximum 20-record history within 1,800 seconds with a main-protocol minimum of 10 records. The anchor does not receive lifecycle fraction, remaining life, failure time, or trajectory metadata as model input.
+
+**Consequences:** Task 4.2 produces a reproducible anchor manifest rather than model-ready windows. Long trajectories no longer automatically contribute more anchors unless the configured per-bearing sample budget permits it. Later tasks must consume the manifest to construct history and future sequences, preserve source measurement indices, and keep all derived records within the assigned split.
+
+**Reconsideration conditions:** A downstream task requires arbitrary query times, a validated interpolation policy becomes available, the minimum-history protocol changes, or evaluation requires a different anchor sampling design. Any change must version the anchor manifest schema and sampling policy.

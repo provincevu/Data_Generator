@@ -326,3 +326,32 @@ Giữ `measurement_index` và `elapsed_time_sec` theo chronology nguồn. Measur
 **Hệ quả:** Task 4.1 tạo bảng trajectory dạng dài làm nguồn chuẩn và có thể tạo artifact sequence theo từng bearing. Các task sau được phép tạo history window nhân quả, future target, padding mask và tensor batch từ biểu diễn này mà không đổi chronology. Phần lưu trữ và batching phải hỗ trợ `N_b` thay đổi; phải split toàn bộ trajectory trước khi tạo artifact dẫn xuất.
 
 **Điều kiện xem xét lại:** Dataset mới cần atomic unit khác, một task cụ thể chứng minh cần lưới thời gian chung đã kiểm chứng, hoặc mô hình cần đóng gói multi-channel lossless mà format sequence dẫn xuất hiện tại không đáp ứng. Mọi thay đổi phải giữ bảng dài nguồn hoặc tạo một phiên bản thay thế có version.
+
+## IMPORTANT — Lấy mẫu random anchor nhân quả tại snapshot XJTU-SY đã quan sát
+
+**Quyết định:** Với Task 4.2, chỉ chọn `t_anchor` từ các snapshot hợp lệ đã quan sát, không chọn từ thời điểm liên tục nằm giữa hai measurement. Một anchor hợp lệ phải có ít nhất 10 snapshot hợp lệ, tính cả snapshot anchor, trong 1.800 giây trước anchor và phải có ít nhất một snapshot đã quan sát sau anchor. Tạo danh sách anchor hợp lệ riêng cho từng trajectory đầy đủ sau khi áp dụng split trajectory. Lấy mẫu bên trong từng bearing để trajectory dài không áp đảo phân phối anchor. Dùng seed tất định cho validation/test và chính sách tái lập `base_seed + epoch` cho train. Lưu `anchor_manifest.parquet` gồm identity trajectory, split, identity anchor, measurement index nguồn, elapsed time của anchor, số history/future và seed lấy mẫu.
+
+Snapshot anchor thuộc history với `lag_sec = 0`. Các record history dùng `lag_sec = elapsed_time_sec - anchor_elapsed_time_sec`; measurement thiếu vẫn là khoảng trống thời gian thật, không nội suy và không renumber. Task 4.2 chỉ chọn anchor; việc tạo sequence history và future target thuộc task sau.
+
+**Ngày:** 2026-10-10
+
+**Vấn đề được giải quyết:** Biểu diễn trajectory đầy đủ cần một cách chọn điểm truy vấn nhân quả, tái lập được, không tạo timestamp giả, không để trajectory dài tạo quá nhiều anchor và không cho anchor vượt ranh giới split.
+
+**Trạng thái hệ thống hiện tại:** Task 4.1 đã định nghĩa trajectory có độ dài thay đổi và snapshot cố định chiều. Snapshot XJTU-SY cách nhau xấp xỉ một phút nhưng có thể có measurement bị thiếu thật. Quy trình causal yêu cầu ít nhất 10 record trong 30 phút trước và chỉ dự đoán record sau anchor.
+
+**Yêu cầu nghiệp vụ/dự án:** Giữ chronology không đều; tạo đủ điểm truy vấn random cho train; làm validation/test tái lập; cho mỗi bearing cơ hội đóng góp công bằng; bảo đảm mỗi anchor có history dùng được và future không rỗng; ngăn rò rỉ split và thông tin tương lai.
+
+**Các phương án đã cân nhắc:**
+1. Lấy mẫu thời điểm liên tục tùy ý. Không chọn vì anchor không tương ứng với snapshot feature đã quan sát và cần nội suy hoặc định nghĩa trạng thái hiện tại không rõ.
+2. Lấy mẫu đều trên toàn bộ snapshot của dataset. Không chọn vì trajectory dài sẽ áp đảo phân phối train.
+3. Chấp nhận anchor có dưới 10 record history. Không chọn vì protocol chính yêu cầu tối thiểu 10; context ngắn thuộc robustness evaluation riêng.
+4. Chọn anchor trước khi áp dụng split trajectory. Không chọn vì khó audit leakage và có thể trộn artifact giữa các split.
+5. Tạo history và target ngay trong bộ chọn anchor. Không chọn vì chọn anchor và tạo sample cần độc lập để dễ kiểm thử.
+
+**Lập luận:** Anchor tại snapshot đã quan sát giữ đúng ngữ nghĩa thời gian nguồn và cung cấp trực tiếp `X_anchor`. Điều kiện và lấy mẫu theo bearing cân bằng 15 trajectory vật lý dù lifetime khác nhau rất lớn. Seed giúp validation/test tái lập, đồng thời vẫn tạo đa dạng cho train theo epoch. Yêu cầu có future record tránh target rỗng mà không đưa thông tin đó vào model input; việc kiểm tra future chỉ phục vụ tạo sample offline.
+
+**Bằng chứng và giả định:** XJTU-SY ghi một CSV xấp xỉ mỗi phút, dự án định nghĩa `elapsed_time_sec` từ measurement nguồn dạng số, và quyết định causal cố định history tối đa 20 record trong 1.800 giây với tối thiểu 10 record cho protocol chính. Anchor không nhận lifecycle fraction, remaining life, failure time hoặc metadata trajectory làm input mô hình.
+
+**Hệ quả:** Task 4.2 tạo manifest anchor tái lập được, chưa tạo window dùng trực tiếp cho mô hình. Trajectory dài không tự động đóng góp nhiều anchor hơn nếu ngân sách anchor theo bearing không cho phép. Các task sau phải dùng manifest để tạo history/future sequence, giữ measurement index nguồn và giữ mọi record dẫn xuất trong đúng split.
+
+**Điều kiện xem xét lại:** Task sau cần query time tùy ý, có chính sách nội suy được kiểm chứng, protocol thay đổi minimum history hoặc đánh giá cần thiết kế lấy mẫu anchor khác. Mọi thay đổi phải tăng phiên bản schema manifest và chính sách lấy mẫu.
