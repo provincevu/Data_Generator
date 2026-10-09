@@ -297,3 +297,31 @@ Use a deterministic baseline grouped split for preprocessing: condition 3 is tes
 **Consequences:** The FFT schema has additional characteristic-frequency columns and status fields. Users must fill `configs/xjtu_bearing_geometry.example.yaml` from an authoritative bearing source before interpreting BPFO/BPFI/BSF/FTF numerically. Existing runs without that option remain valid for other FFT statistics, but must be regenerated to populate the new schema.
 
 **Reconsideration conditions:** An authoritative XJTU-SY bearing drawing or manufacturer datasheet becomes available; shaft speed varies within a waveform and requires time-varying frequency estimates; the bearing model is confirmed to differ; or the project adopts a validated slip/geometry correction model.
+
+## IMPORTANT — Represent each XJTU-SY bearing as a full variable-length feature trajectory
+
+**Decision:** For Task 4.1, represent each bearing trajectory as an ordered variable-length sequence of snapshot records. Each snapshot contains the Phase 3 feature vector `X_i ∈ R^30`, `elapsed_time_sec`, the source `measurement_index`, and a feature-validity mask. Use a long Parquet table as the canonical representation, with one row per bearing × measurement snapshot. Create packed sequence arrays `[N_b, 30]`, time arrays `[N_b]`, and masks `[N_b, 30]` only as derived training artifacts; `N_b` remains variable by bearing.
+
+Keep `measurement_index` and `elapsed_time_sec` from the source chronology. Missing measurements remain temporal gaps and are not renumbered or interpolated. Keep `split` as provenance/evaluation metadata in the table, but never include it in `X_i`. Keep condition, bearing, fault, lifetime, and other trajectory metadata outside the model feature vector; lifecycle fraction is allowed only for offline analysis/evaluation.
+
+**Date:** 2026-10-09
+
+**Problem addressed:** Phase 3 now produces fixed-dimensional snapshot features, but Task 4.1 needs a faithful representation of complete bearing histories before windows, anchors, targets, or model batches are created.
+
+**Current system state:** There are 15 XJTU-SY bearing trajectories and 9,216 snapshot rows with `D = 30` features. Source measurement numbers and elapsed time follow the established XJTU chronology policy. The Phase 3 snapshot table already provides the long-table basis for this representation.
+
+**Business/project requirements:** Preserve complete trajectories and real temporal gaps; support bearings with very different lifetimes; make the representation inspectable and reproducible; prevent lifecycle and split metadata from leaking into model inputs; support later causal history windows and variable-length future targets.
+
+**Alternatives considered:**
+1. Flatten one complete bearing into one fixed-length vector. Rejected because trajectory lengths differ substantially and the result would be impractical and hard to batch.
+2. Resample or interpolate every trajectory to a common time grid. Rejected because it fabricates observations and hides missing measurements.
+3. Use only a packed tensor as the canonical artifact. Rejected because a long table is easier to audit, filter, join, and reproduce; packed tensors remain useful derived training artifacts.
+4. Put condition, fault, lifetime, or split identifiers into `X_i`. Rejected because these are provenance/evaluation metadata and can leak experimental structure or future information.
+
+**Rationale:** A sequence of fixed-dimensional snapshots preserves the natural separation between per-snapshot representation and variable trajectory length. The long table retains source identity and chronology exactly, while derived arrays provide the efficient `[N_b, 30]` form required by later training code. Keeping masks and metadata separate supports incomplete channels and leakage-safe experiments without changing the raw Observation contract.
+
+**Evidence and assumptions:** Phase 3 fixes `D = 30` by concatenating 15 horizontal and 15 vertical scalar features. The XJTU-SY project decisions require preserving numeric source measurement numbers, treating missing measurements as real gaps, avoiding waveform interpolation, and excluding lifecycle/failure information from baseline inference inputs.
+
+**Consequences:** Task 4.1 outputs a canonical long trajectory table and may output derived per-bearing sequence artifacts. Later tasks may create causal history windows, future targets, padding masks, and batch tensors from this representation without changing its chronology. Storage and batching must handle variable `N_b`; complete trajectories must be split before those derived artifacts are created.
+
+**Reconsideration conditions:** A future dataset requires a different atomic unit, a validated common time grid becomes necessary for a specific downstream task, or a model requires lossless multi-channel tensor packing that cannot be represented by the current derived sequence format. Any change must preserve the long-table source or introduce a versioned replacement.

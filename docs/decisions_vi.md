@@ -298,3 +298,31 @@ Dùng split baseline theo nhóm, tất định cho tiền xử lý: condition 3 
 **Hệ quả:** Schema FFT có thêm các cột tần số đặc trưng và trạng thái. Người dùng phải điền `configs/xjtu_bearing_geometry.example.yaml` từ nguồn kỹ thuật có thẩm quyền trước khi diễn giải BPFO/BPFI/BSF/FTF bằng số. Các lần chạy không truyền tùy chọn này vẫn hợp lệ cho các thống kê FFT khác, nhưng cần chạy lại để tạo schema mới.
 
 **Điều kiện xem xét lại:** Có bản vẽ ổ bi XJTU-SY hoặc datasheet nhà sản xuất có thẩm quyền; tốc độ trục thay đổi trong một waveform và cần ước lượng tần số theo thời gian; xác nhận model ổ bi khác; hoặc dự án áp dụng mô hình hiệu chỉnh slip/hình học đã được kiểm chứng.
+
+## IMPORTANT — Biểu diễn mỗi bearing XJTU-SY thành trajectory feature đầy đủ có độ dài thay đổi
+
+**Quyết định:** Với Task 4.1, biểu diễn mỗi trajectory của bearing thành một sequence có thứ tự và độ dài thay đổi. Mỗi snapshot chứa vector feature Phase 3 `X_i ∈ R^30`, `elapsed_time_sec`, `measurement_index` nguồn và mask hợp lệ của feature. Dùng bảng Parquet dạng dài làm biểu diễn chuẩn, một dòng cho mỗi bearing × measurement snapshot. Chỉ tạo các mảng sequence đóng gói `[N_b, 30]`, mảng thời gian `[N_b]` và mask `[N_b, 30]` như artifact dẫn xuất cho huấn luyện; `N_b` thay đổi theo bearing.
+
+Giữ `measurement_index` và `elapsed_time_sec` theo chronology nguồn. Measurement bị thiếu vẫn là khoảng trống thời gian thật, không renumber và không nội suy. Giữ `split` trong bảng như metadata provenance/đánh giá, nhưng không đưa vào `X_i`. Condition, bearing, fault, lifetime và metadata trajectory khác nằm ngoài vector feature mô hình; lifecycle fraction chỉ được dùng cho phân tích/đánh giá offline.
+
+**Ngày:** 2026-10-09
+
+**Vấn đề được giải quyết:** Phase 3 đã tạo feature cố định chiều cho từng snapshot, nhưng Task 4.1 cần biểu diễn trung thực toàn bộ lịch sử của bearing trước khi tạo window, anchor, target hoặc batch mô hình.
+
+**Trạng thái hệ thống hiện tại:** Có 15 trajectory XJTU-SY và 9.216 snapshot với `D = 30`. Số measurement nguồn và elapsed time tuân theo quy ước chronology XJTU đã chốt. Bảng snapshot Phase 3 hiện là nền tảng dạng dài cho biểu diễn này.
+
+**Yêu cầu nghiệp vụ/dự án:** Giữ toàn bộ trajectory và khoảng trống thời gian thật; hỗ trợ lifetime rất khác nhau giữa các bearing; làm cho biểu diễn dễ kiểm tra và tái lập; ngăn metadata lifecycle và split rò rỉ vào input mô hình; hỗ trợ các history window nhân quả và future target có độ dài thay đổi về sau.
+
+**Các phương án đã cân nhắc:**
+1. Làm phẳng toàn bộ bearing thành một vector cố định chiều. Không chọn vì độ dài trajectory khác nhau đáng kể và khó batch hiệu quả.
+2. Resample hoặc nội suy mọi trajectory về cùng lưới thời gian. Không chọn vì tạo observation giả và che giấu measurement bị thiếu.
+3. Chỉ dùng tensor đóng gói làm artifact chuẩn. Không chọn vì bảng dài dễ audit, lọc, join và tái lập hơn; tensor đóng gói vẫn hữu ích như artifact huấn luyện dẫn xuất.
+4. Đưa condition, fault, lifetime hoặc split identifier vào `X_i`. Không chọn vì đây là metadata provenance/đánh giá và có thể làm rò rỉ cấu trúc thí nghiệm hoặc thông tin tương lai.
+
+**Lập luận:** Sequence gồm các snapshot cố định chiều giữ đúng sự phân tách giữa biểu diễn từng snapshot và độ dài trajectory biến thiên. Bảng dài giữ chính xác identity và chronology nguồn, còn mảng dẫn xuất cung cấp dạng `[N_b, 30]` hiệu quả cho mã huấn luyện phía sau. Giữ mask và metadata riêng giúp hỗ trợ kênh thiếu và thí nghiệm không rò rỉ mà không thay đổi hợp đồng Observation raw.
+
+**Bằng chứng và giả định:** Phase 3 đã chốt `D = 30` bằng cách nối 15 feature horizontal và 15 feature vertical. Các quyết định XJTU-SY yêu cầu giữ số measurement nguồn dạng số, coi measurement thiếu là khoảng trống thật, không nội suy waveform và loại lifecycle/failure information khỏi input inference baseline.
+
+**Hệ quả:** Task 4.1 tạo bảng trajectory dạng dài làm nguồn chuẩn và có thể tạo artifact sequence theo từng bearing. Các task sau được phép tạo history window nhân quả, future target, padding mask và tensor batch từ biểu diễn này mà không đổi chronology. Phần lưu trữ và batching phải hỗ trợ `N_b` thay đổi; phải split toàn bộ trajectory trước khi tạo artifact dẫn xuất.
+
+**Điều kiện xem xét lại:** Dataset mới cần atomic unit khác, một task cụ thể chứng minh cần lưới thời gian chung đã kiểm chứng, hoặc mô hình cần đóng gói multi-channel lossless mà format sequence dẫn xuất hiện tại không đáp ứng. Mọi thay đổi phải giữ bảng dài nguồn hoặc tạo một phiên bản thay thế có version.
