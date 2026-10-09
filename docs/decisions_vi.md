@@ -429,3 +429,25 @@ Các sparse regime ban đầu là điều kiện robustness evaluation. Main tra
 **Hệ quả:** Robustness sparse có thể tạo dưới 3 context dù protocol chính yêu cầu tối thiểu 10; phải báo cáo số record sau mask và mask thực tế. Điểm 3 vẫn là quy tắc context dense nền, còn Điểm 5 là stress test riêng về availability của observation. Future target vẫn là feature vector quan sát chính xác.
 
 **Điều kiện xem xét lại:** Validation cho thấy cần sparse augmentation trong main training, có quy trình missingness thực tế từ deployment, hoặc cần mô hình hóa riêng việc thiếu future target. Mọi thay đổi phải tăng phiên bản sparse regime và policy mask.
+
+## IMPORTANT — Tạo training example động và cố định manifest validation/test
+
+**Quyết định:** Không coi các training example đã mở rộng là artifact trajectory chuẩn. Khi train, tạo example động theo từng epoch từ bảng snapshot chuẩn bằng chính sách seed tất định đã lưu. Với validation và test, tạo và lưu manifest cố định để mọi lần đánh giá tái lập chính xác. Manifest lưu reference đến snapshot nguồn bằng identity trajectory và `measurement_index`; không sao chép feature vector.
+
+Mỗi dòng sample manifest phải gồm version schema, split, context regime, sparse regime, seed, measurement index và elapsed time của anchor, các measurement index context đã chọn, relative time của context, context mask/retention mask, `K`, các measurement index future query đã chọn, future relative query time, `Q` và policy target/query. Có thể tạo manifest riêng cho đánh giá full remaining-lifecycle, liệt kê toàn bộ measurement tương lai đã quan sát sau anchor.
+
+**Ngày:** 2026-10-10
+
+**Vấn đề được giải quyết:** Điểm 1–5 đã định nghĩa cách chọn anchor, context, future query và sparse mask, nhưng dự án vẫn cần ranh giới tái lập được giữa dữ liệu trajectory chuẩn và example dùng cho mô hình.
+
+**Trạng thái hệ thống hiện tại:** Bảng snapshot chuẩn của Phase 3 có vector cố định chiều. Các quyết định sampling đã chốt anchor hợp lệ, `K`, cách chọn context, future query và sparse regime, nhưng chưa chốt schema manifest hoặc policy materialize.
+
+**Yêu cầu nghiệp vụ/dự án:** Tránh duplicate mảng feature lớn; làm train stochastic nhưng tái lập; làm validation/test bất biến và có thể audit; giữ đủ index, mask và seed để dựng lại mọi example; tách biểu diễn trajectory nguồn khỏi batching mô hình.
+
+**Các phương án đã cân nhắc:** Lưu mọi training example có thể có, không chọn vì tích Descartes của anchor, `K`, sparse mask và future query rất lớn và lặp lại. Tạo validation/test động, không chọn vì kết quả có thể đổi theo code, thứ tự hoặc random state. Lưu feature vector bản sao trong từng dòng manifest, không chọn vì duplicate bảng snapshot chuẩn và làm provenance phức tạp.
+
+**Lập luận:** Example train động tạo variation có kiểm soát qua các epoch mà không thay đổi dữ liệu chuẩn. Manifest validation/test cố định làm so sánh công bằng và tái lập. Reference theo index giữ provenance và làm manifest nhỏ; mã materialize có thể join reference vào bảng snapshot cố định và chỉ tạo tensor padding khi cần batch.
+
+**Hệ quả:** Mã train phải nhận seed và epoch của sampler. Mã đánh giá chỉ dùng manifest đã lưu. Thay đổi sampling policy hoặc feature schema phải tạo version manifest/schema mới. Đánh giá full lifecycle có thể dùng policy manifest riêng mà không đổi example random-query khi train.
+
+**Điều kiện xem xét lại:** Dung lượng lưu trữ đủ và cần materialize exhaustive, online serving cần format record khác, hoặc mô hình cần artifact tensor serialize cố định thay vì example theo index. Mọi thay đổi phải giữ liên kết có thể dựng lại tới bảng snapshot chuẩn.

@@ -428,3 +428,25 @@ Sparse regimes are robustness-evaluation conditions in the initial implementatio
 **Consequences:** Sparse evaluation can produce fewer than 3 context records even though the main protocol requires at least 10; the actual post-mask count and mask must be reported. Point 3 remains the dense base-context rule, while Point 5 is an additional observation-availability stress test. Future targets remain exact observed feature vectors.
 
 **Reconsideration conditions:** Validation shows that sparse augmentation is necessary for main training, a real deployment missingness process becomes available, or future-target missingness must be modeled explicitly. Any change must version the sparse regime and mask policy.
+
+## IMPORTANT — Materialize training examples dynamically and freeze validation/test manifests
+
+**Decision:** Do not make expanded training examples the canonical trajectory artifact. During training, generate examples dynamically per epoch from the canonical snapshot table using a recorded deterministic seed policy. For validation and test, generate and persist fixed manifests so every evaluation can be reproduced exactly. The manifest stores references to source snapshots by trajectory identity and `measurement_index`; it does not duplicate feature vectors.
+
+Each sample manifest record must include the schema version, split, context regime, sparse regime, seed, anchor measurement index and elapsed time, selected context measurement indices, context relative times, context masks/retention masks, `K`, selected future query measurement indices, future relative query times, `Q`, and the target/query policy. A separate full-remaining-lifecycle evaluation manifest may list all observed future measurement indices after the anchor.
+
+**Date:** 2026-10-10
+
+**Problem addressed:** Points 1–5 define how anchors, context, future queries, and sparse masks are selected, but the project still needs a reproducible boundary between canonical trajectory data and model-ready examples.
+
+**Current system state:** The canonical Phase 3 snapshot table contains fixed-dimensional vectors. Sampling decisions now define eligible anchors, `K`, context selection, future queries, and sparse regimes, but no sample manifest schema or materialization policy has been fixed.
+
+**Business/project requirements:** Avoid duplicating large feature arrays; make training stochastic but reproducible; make validation/test immutable and auditable; retain enough indices, masks, and seeds to reconstruct every example; keep the source trajectory representation independent from model batching.
+
+**Alternatives considered:** Persist every possible training example, rejected because the Cartesian expansion of anchors, `K`, sparse masks, and future queries is large and redundant. Generate validation/test examples dynamically, rejected because results would change with code, ordering, or random state. Store copied feature vectors in every manifest row, rejected because it duplicates the canonical snapshot table and complicates provenance.
+
+**Rationale:** Dynamic training examples provide controlled variation across epochs without changing the canonical data. Frozen validation/test manifests make comparisons fair and reproducible. Index-based references preserve provenance and keep the manifest small; materialization code can join references to the fixed-dimensional snapshot table and construct padded tensors only when a batch is needed.
+
+**Consequences:** Training code must expose a seed and epoch to the sampler. Evaluation code must consume only the persisted manifest. Changes to sampling policy or feature schema require a new manifest/schema version. Full-lifecycle evaluation can use a separate manifest policy without changing random-query training examples.
+
+**Reconsideration conditions:** Storage is sufficient and exhaustive pre-materialization becomes necessary, an online serving path requires a different record format, or a model needs a fixed serialized tensor artifact rather than index-based examples. Any change must preserve a reconstructible link to the canonical snapshot table.
