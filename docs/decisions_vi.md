@@ -365,3 +365,23 @@ Cụm “dự đoán toàn bộ lifecycle” nghĩa là dự đoán toàn bộ t
 Với protocol chính, lấy số nguyên `K ~ Uniform{10, ..., min(20, pool_size)}`. `K` bao gồm snapshot anchor. Anchor có dưới 10 record hợp lệ trong pool sẽ bị loại khỏi protocol chính. Với robustness protocol riêng, lấy `K ~ Uniform{3, ..., 9}` và gắn nhãn `context_regime = short_robustness`; các context ngắn này không được âm thầm trộn vào train hoặc kết quả tổng hợp của protocol chính.
 
 **Lập luận:** `K` thay đổi thể hiện sự khác nhau thực tế về lượng history quan sát được nhưng vẫn giữ minimum-history của protocol chính. Phân phối đều rời rạc bao phủ công bằng từng kích thước context, cho phép đo độ nhạy theo `K` và tránh để context quá ngắn định nghĩa lại bài toán chính.
+
+## IMPORTANT — Chọn snapshot context random nhưng luôn giữ anchor và predecessor gần nhất
+
+**Quyết định:** Với context pool đã giới hạn và số lượng context `K` đã chọn, luôn giữ snapshot anchor và snapshot thực tế gần anchor nhất ở phía trước. Chọn `K - 2` snapshot còn lại theo phân phối đều, không lặp, từ các record hợp lệ khác trong pool. Nếu không có predecessor gần nhất, lấy thêm một record từ pool còn lại để đủ số lượng. Sắp xếp context theo chronology trước khi tính/lưu relative time. Giữ nguyên gap nguồn; không nội suy, renumber hoặc duplicate observation.
+
+**Ngày:** 2026-10-10
+
+**Vấn đề được giải quyết:** Việc chọn context random cần mô phỏng quan sát không đều nhưng vẫn giữ trạng thái hiện tại và ít nhất một thay đổi thời gian cục bộ để dự báo suy giảm.
+
+**Trạng thái hệ thống hiện tại:** Điểm 1 định nghĩa pool tối đa 20 snapshot thực tế gần anchor và có anchor. Điểm 2 định nghĩa `K` thay đổi cho protocol chính và robustness.
+
+**Yêu cầu nghiệp vụ/dự án:** Giữ trạng thái hiện tại tại `relative_t = 0`; cung cấp ít nhất một chuyển tiếp gần nhất vào anchor; tạo context thưa đa dạng; giữ selection tái lập và trung thành với nguồn.
+
+**Các phương án đã cân nhắc:** Luôn lấy `K` record gần nhất làm giảm độ đa dạng context; lấy đều cả `K` record có thể bỏ predecessor gần nhất và làm yếu thông tin xu hướng cục bộ; lấy mẫu có trọng số recency cần thêm hyperparameter chưa được kiểm chứng.
+
+**Lập luận:** Giữ anchor làm trạng thái hiện tại rõ ràng. Giữ predecessor gần nhất cung cấp tín hiệu thay đổi cục bộ tối thiểu. Lấy đều các record còn lại tạo context không đều đa dạng mà không thêm trọng số tùy ý. Sắp xếp sau khi chọn giữ chronology trong khi vẫn bảo toàn gap thật.
+
+**Hệ quả:** Context có thể thay đổi giữa các epoch nhưng vẫn tái lập được theo seed đã lưu. Khi pool đủ điều kiện, số lượng context luôn đúng `K`. Quy tắc này chỉ áp dụng cho chọn context; chọn future query là quyết định riêng.
+
+**Điều kiện xem xét lại:** Validation cho thấy predecessor gần nhất chưa đủ để nắm xu hướng cục bộ, mô hình sau này cần policy recency-weighting đã được kiểm chứng, hoặc quy trình quan sát khác cần bộ mô phỏng missingness khác. Mọi thay đổi phải tăng phiên bản policy chọn context.

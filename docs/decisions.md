@@ -364,3 +364,23 @@ The phrase “full lifecycle prediction” means predicting the complete remaini
 For the main protocol, sample the integer context count as `K ~ Uniform{10, ..., min(20, pool_size)}`. `K` includes the anchor snapshot. Anchors with fewer than 10 eligible pool records are excluded from the main protocol. For a separate robustness protocol, sample `K ~ Uniform{3, ..., 9}` and label it `context_regime = short_robustness`; these short contexts are not silently mixed into main-protocol training or aggregate results.
 
 **Rationale:** Variable `K` represents realistic differences in available monitoring history while preserving the minimum-history requirement of the main protocol. A discrete uniform distribution gives equal coverage to each supported context size, makes sensitivity by `K` measurable, and avoids letting very short contexts redefine the primary task.
+
+## IMPORTANT — Select random context snapshots with anchor and immediate predecessor retained
+
+**Decision:** Given a capped context pool and a chosen context count `K`, always retain the anchor snapshot and the most recent observed snapshot before the anchor. Select the remaining `K - 2` snapshots uniformly without replacement from the other eligible pool records. If the immediate predecessor is unavailable, fill the missing slot from the remaining pool. Sort the selected context chronologically before computing/serializing relative times. Preserve actual source gaps; do not interpolate, renumber, or duplicate observations.
+
+**Date:** 2026-10-10
+
+**Problem addressed:** Random context selection must simulate irregular observation while retaining the current state and enough local temporal change to support degradation forecasting.
+
+**Current system state:** Point 1 defines a pool of at most 20 recent observed snapshots including the anchor. Point 2 defines a variable `K` for main and robustness protocols.
+
+**Business/project requirements:** Preserve the current state at `relative_t = 0`; expose at least one recent transition into the anchor; create varied sparse contexts; keep selection reproducible and source-faithful.
+
+**Alternatives considered:** Always taking the most recent `K` records reduces context variation; sampling all `K` records uniformly can omit the immediate predecessor and weaken local trend information; recency-weighted sampling adds an unvalidated hyperparameter.
+
+**Rationale:** Retaining the anchor makes the current state explicit. Retaining the immediate predecessor provides a minimal local change signal. Uniform sampling of the remaining records creates irregular context variation without adding arbitrary sampling weights. Sorting after selection preserves chronology while allowing the selected records to contain real gaps.
+
+**Consequences:** The selected context may differ across training epochs while remaining reproducible under a recorded seed. The context length remains exactly `K` whenever the pool is eligible. This rule applies only to context selection; future query selection is a separate decision.
+
+**Reconsideration conditions:** Validation shows the immediate predecessor is insufficient to capture local trend, a later model requires a validated recency-weighting policy, or a different observation process requires another missingness simulator. Any change must version the context-sampling policy.
