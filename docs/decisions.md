@@ -384,3 +384,25 @@ For the main protocol, sample the integer context count as `K ~ Uniform{10, ...,
 **Consequences:** The selected context may differ across training epochs while remaining reproducible under a recorded seed. The context length remains exactly `K` whenever the pool is eligible. This rule applies only to context selection; future query selection is a separate decision.
 
 **Reconsideration conditions:** Validation shows the immediate predecessor is insufficient to capture local trend, a later model requires a validated recency-weighting policy, or a different observation process requires another missingness simulator. Any change must version the context-sampling policy.
+
+## IMPORTANT — Sample random future queries from the observed remaining trajectory
+
+**Decision:** For each eligible anchor, define the future-query pool as every observed snapshot with `elapsed_time_sec > anchor_elapsed_time_sec` through the end of that bearing trajectory. For a training example, sample `Q ~ Uniform{1, ..., min(8, future_pool_size)}` and select `Q` distinct future snapshots uniformly without replacement. Sort the selected queries chronologically and express them as `future_relative_t = future_elapsed_time_sec - anchor_elapsed_time_sec`. The corresponding normalized feature vectors and validity masks are the supervised targets. Do not use the anchor as a future query, create arbitrary continuous query times, or interpolate targets.
+
+Validation/test query selection is seeded and persisted for reproducibility. Full remaining-lifecycle evaluation uses all observed future snapshots after the anchor in chronological order, so random query sampling does not truncate the lifecycle target; it only controls the number of supervised query points in a training example.
+
+**Date:** 2026-10-10
+
+**Problem addressed:** The model must learn to answer future-time queries while retaining the ability to evaluate the complete remaining trajectory from an anchor to the trajectory endpoint.
+
+**Current system state:** Points 1–3 define an observed-snapshot anchor, a capped recent context pool, a variable context count `K`, and randomized context selection. The project has fixed-dimensional normalized snapshot features but has not yet defined future-query sampling.
+
+**Business/project requirements:** Preserve actual XJTU-SY chronology; avoid fabricated future targets; support multiple future horizons in one example; maintain reproducible validation/test evaluation; preserve full remaining-lifecycle evaluation.
+
+**Alternatives considered:** Sample arbitrary continuous future times, rejected because the dataset has no exact target at those times and interpolation is not approved. Always use every future snapshot for every training example, rejected because it creates large, highly redundant examples and reduces query diversity. Use a single fixed future horizon, rejected because it does not test the model's ability to answer multiple future-time requests.
+
+**Rationale:** Sampling observed future snapshots provides exact targets and respects the no-interpolation policy. A bounded variable `Q` exposes the model to different numbers of future requests while keeping examples manageable. Chronological sorting preserves trajectory order. A separate all-future evaluation mode ensures that random training queries do not conflict with the goal of predicting the complete remaining lifecycle.
+
+**Consequences:** Training examples contain a variable number of future queries with exact observed targets. Validation/test manifests must store seeds and selected future measurement indices. Later rollout code can request all future observed times or a custom query list only where targets are not required for supervised training.
+
+**Reconsideration conditions:** A validated interpolation/continuous-time target policy is introduced, the model architecture requires a fixed query count, or the project changes the evaluation definition of full remaining-lifecycle prediction. Any change must version the query-sampling policy.

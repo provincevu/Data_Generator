@@ -385,3 +385,25 @@ Với protocol chính, lấy số nguyên `K ~ Uniform{10, ..., min(20, pool_siz
 **Hệ quả:** Context có thể thay đổi giữa các epoch nhưng vẫn tái lập được theo seed đã lưu. Khi pool đủ điều kiện, số lượng context luôn đúng `K`. Quy tắc này chỉ áp dụng cho chọn context; chọn future query là quyết định riêng.
 
 **Điều kiện xem xét lại:** Validation cho thấy predecessor gần nhất chưa đủ để nắm xu hướng cục bộ, mô hình sau này cần policy recency-weighting đã được kiểm chứng, hoặc quy trình quan sát khác cần bộ mô phỏng missingness khác. Mọi thay đổi phải tăng phiên bản policy chọn context.
+
+## IMPORTANT — Lấy mẫu random future query từ trajectory còn lại đã quan sát
+
+**Quyết định:** Với mỗi anchor hợp lệ, future-query pool gồm mọi snapshot đã quan sát có `elapsed_time_sec > anchor_elapsed_time_sec` cho đến cuối trajectory của bearing đó. Với một training example, lấy `Q ~ Uniform{1, ..., min(8, future_pool_size)}` rồi chọn `Q` snapshot tương lai khác nhau theo phân phối đều, không lặp. Sắp xếp query theo chronology và biểu diễn bằng `future_relative_t = future_elapsed_time_sec - anchor_elapsed_time_sec`. Vector feature đã chuẩn hóa và validity mask tương ứng là target có supervision. Không dùng anchor làm future query, không tạo query time liên tục tùy ý và không nội suy target.
+
+Việc chọn query validation/test dùng seed và được lưu lại để tái lập. Đánh giá full remaining-lifecycle dùng toàn bộ snapshot tương lai đã quan sát sau anchor theo thứ tự thời gian; random query sampling không cắt ngắn target lifecycle mà chỉ điều khiển số điểm query có supervision trong một training example.
+
+**Ngày:** 2026-10-10
+
+**Vấn đề được giải quyết:** Mô hình cần học cách trả lời query ở các thời điểm tương lai nhưng vẫn phải đánh giá được toàn bộ trajectory còn lại từ anchor đến endpoint.
+
+**Trạng thái hệ thống hiện tại:** Điểm 1–3 đã định nghĩa anchor tại snapshot quan sát, context pool gần đây có giới hạn, số lượng context thay đổi `K` và cách chọn context random. Dự án đã có feature snapshot cố định chiều đã chuẩn hóa nhưng chưa chốt cách lấy future query.
+
+**Yêu cầu nghiệp vụ/dự án:** Giữ chronology XJTU-SY thật; tránh target tương lai giả; hỗ trợ nhiều horizon trong một example; làm validation/test tái lập; giữ khả năng đánh giá toàn bộ lifecycle còn lại.
+
+**Các phương án đã cân nhắc:** Lấy query time liên tục tùy ý, không chọn vì dataset không có target chính xác tại các thời điểm đó và chưa cho phép nội suy. Dùng toàn bộ snapshot tương lai trong mọi training example, không chọn vì example lớn, lặp lại cao và giảm đa dạng query. Dùng một horizon tương lai cố định, không chọn vì không kiểm tra được khả năng trả lời nhiều yêu cầu thời gian.
+
+**Lập luận:** Lấy snapshot tương lai đã quan sát cung cấp target chính xác và tuân thủ chính sách không nội suy. `Q` biến thiên có giới hạn giúp mô hình gặp nhiều số lượng query nhưng vẫn giữ kích thước example kiểm soát được. Sắp xếp theo chronology bảo toàn thứ tự trajectory. Chế độ đánh giá dùng toàn bộ future bảo đảm random query khi train không mâu thuẫn với mục tiêu dự đoán toàn bộ remaining lifecycle.
+
+**Hệ quả:** Training example có số future query thay đổi và target quan sát chính xác. Manifest validation/test phải lưu seed và measurement index tương lai đã chọn. Mã rollout sau này có thể yêu cầu toàn bộ future time quan sát hoặc một danh sách query tùy chỉnh khi không cần target supervision.
+
+**Điều kiện xem xét lại:** Có policy target liên tục/interpolation được kiểm chứng, kiến trúc cần số query cố định hoặc định nghĩa đánh giá full remaining-lifecycle thay đổi. Mọi thay đổi phải tăng phiên bản policy lấy mẫu query.
