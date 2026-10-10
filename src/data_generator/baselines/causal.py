@@ -1,4 +1,4 @@
-﻿"""Baseline models and masked evaluation for causal XJTU-SY forecasting."""
+"""Baseline models and masked evaluation for causal XJTU-SY forecasting."""
 
 from __future__ import annotations
 
@@ -170,6 +170,34 @@ class SmallMLPBaseline:
         return predictions
 
 
+    def predict_many(self, examples: list[dict[str, Any]]) -> list[np.ndarray]:
+        """Predict all queries in one call per feature model."""
+        if not examples:
+            return []
+        inputs = []
+        lengths = []
+        for example in examples:
+            base = _encode_context(example, self.max_context)
+            query_times = np.asarray(example["future_query_time"], dtype=np.float32)
+            inputs.extend(np.concatenate([base[:-1], [time / 3_600.0]]) for time in query_times)
+            lengths.append(query_times.size)
+        x = np.asarray(inputs, dtype=np.float32)
+        predictions = np.zeros((x.shape[0], FEATURE_DIMENSION), dtype=np.float32)
+        fallback_predictions = [PersistenceBaseline().predict(example) for example in examples]
+        for feature_index, model in enumerate(self._models):
+            if model is None:
+                predictions[:, feature_index] = np.concatenate(
+                    [fallback[:, feature_index] for fallback in fallback_predictions]
+                )
+            else:
+                predictions[:, feature_index] = model.predict(x).astype(np.float32)
+        result = []
+        offset = 0
+        for length in lengths:
+            result.append(predictions[offset:offset + length])
+            offset += length
+        return result
+
 def _add_metrics(
     aggregates: dict[tuple[str, str, str, str], dict[str, float]],
     model_name: str,
@@ -220,9 +248,19 @@ def evaluate_models(
         raise ValueError("manifest and materialized example counts do not match")
     aggregates: dict[tuple[str, str, str, str], dict[str, float]] = {}
 
-    for record, example in zip(records, materialized):
+    batch_predictions = {}
+    for model in model_list:
+        if hasattr(model, "predict_many"):
+            batch_predictions[model.name] = model.predict_many(materialized)
+        else:
+            batch_predictions[model.name] = [model.predict(example) for example in materialized]
+
+    for example_index, (record, example) in enumerate(zip(records, materialized)):
         split = str(record["split"])
-        predictions = {model.name: model.predict(example) for model in model_list}
+        predictions = {
+            model.name: batch_predictions[model.name][example_index]
+            for model in model_list
+        }
         targets = np.asarray(example["future_targets"], dtype=np.float32)
         target_mask = np.asarray(example["future_target_mask"], dtype=bool)
         k_value = str(record["context_count_k"])
