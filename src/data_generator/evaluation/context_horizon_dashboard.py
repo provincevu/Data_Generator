@@ -34,7 +34,8 @@ METRICS_SCHEMA = "xjtu_context_horizon_metrics_v1"
 
 def stable_int(*parts: Any) -> int:
     raw = json.dumps(parts, sort_keys=True, separators=(",", ":"), default=str).encode()
-    return int.from_bytes(hashlib.sha256(raw).digest()[:8], "big")
+    # Keep seeds inside Arrow's signed int64 range when persisted in Parquet.
+    return int.from_bytes(hashlib.sha256(raw).digest()[:8], "big") % (2**63 - 1)
 
 
 def sample_id(*parts: Any) -> str:
