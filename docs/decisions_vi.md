@@ -451,3 +451,27 @@ Mỗi dòng sample manifest phải gồm version schema, split, context regime, 
 **Hệ quả:** Mã train phải nhận seed và epoch của sampler. Mã đánh giá chỉ dùng manifest đã lưu. Thay đổi sampling policy hoặc feature schema phải tạo version manifest/schema mới. Đánh giá full lifecycle có thể dùng policy manifest riêng mà không đổi example random-query khi train.
 
 **Điều kiện xem xét lại:** Dung lượng lưu trữ đủ và cần materialize exhaustive, online serving cần format record khác, hoặc mô hình cần artifact tensor serialize cố định thay vì example theo index. Mọi thay đổi phải giữ liên kết có thể dựng lại tới bảng snapshot chuẩn.
+## IMPORTANT — Bổ sung track đánh giá độ nhạy theo context window và prediction horizon
+
+**Quyết định:** Bổ sung một track đánh giá độ nhạy riêng với context window 30, 40, 50 và 60 phút. Với context window C phút, số record context tối đa là C và số record tối thiểu là floor(0.8 * C), tương ứng (24, 32, 40, 48) cho (30, 40, 50, 60). Số record context thực tế được lấy đều trong khoảng từ tối thiểu đến tối đa khả dụng; luôn giữ anchor và snapshot liền trước, đồng thời giữ nguyên các khoảng trống chronology nguồn.
+
+Với mỗi context window, đánh giá các horizon theo tỷ lệ {25%, 50%, 75%, 100%, 150%, 200%, 300%}. Chuyển tỷ lệ thành số phút bằng cách làm tròn xuống; ví dụ 25% của 30 phút = 7 phút. Một horizon chứa toàn bộ snapshot tương lai quan sát được trong khoảng (t_anchor, t_anchor + horizon]; không nội suy và không tạo timestamp nhân tạo. Nếu trajectory không có snapshot tương lai trong một ô đánh giá, bỏ ô đó cho trajectory và ghi nhận coverage.
+
+Đây là track đánh giá độ nhạy, không thay thế protocol chính đang dùng tối đa 20 record trong 1.800 giây trước anchor.
+
+**Ngày:** 2026-10-10
+
+**Vấn đề cần giải quyết:** Cần đo ảnh hưởng của độ dài context và horizon dự đoán trước khi chọn horizon vận hành cho GAN hoặc diffusion. Protocol chính hiện tại cố định context 30 phút/20 record, còn nghiên cứu độ nhạy này cố ý thử context dài hơn và các cửa sổ tương lai tỷ lệ theo context.
+
+**Trạng thái hệ thống:** Bảng snapshot chuẩn và pipeline manifest đã giữ chronology quan sát được và feature dimension cố định D=30. Sampler chính hiện dùng tối đa 20 record trong 1.800 giây. Kết quả baseline cho thấy ngoại suy dài hạn khó hơn đáng kể so với dự đoán ngắn hạn.
+
+**Yêu cầu dự án:** So sánh model trên một lưới context/horizon có kiểm soát; chỉ dùng observation thật của XJTU-SY; thể hiện rõ coverage tương lai bị thiếu; hỗ trợ context dense và sparse; không thay đổi trajectory chuẩn hoặc âm thầm thay đổi thí nghiệm chính.
+
+**Các phương án đã cân nhắc:** Thay protocol chính bằng context 60 phút không chọn vì phá tính so sánh với manifest và quyết định hiện tại. Bắt buộc đúng một target tại endpoint horizon không chọn vì XJTU-SY có measurement thiếu và chưa cho phép nội suy. Làm tròn horizon lẻ đến số nguyên gần nhất không chọn vì dự án yêu cầu làm tròn xuống. Âm thầm bỏ các ô thiếu future không chọn vì coverage là kết quả quan trọng để đánh giá tính khả thi.
+
+**Lý do:** Tăng record budget theo context duration làm biến đánh giá rõ ràng: context 60 phút có thể chứa tối đa 60 observation theo cadence một phút. Làm tròn xuống tạo horizon bảo thủ và tái lập. Dùng toàn bộ target quan sát được trong horizon đo sequence prediction mà không tạo dữ liệu. Ghi coverage theo từng ô ngăn việc hiểu nhầm kết quả horizon dài là kết quả trên toàn bộ bearing.
+
+**Hệ quả:** Lưới đánh giá tạo manifest và metrics riêng theo context/horizon/sparsity. Context dài và đánh giá toàn bộ anchor có thể tốn tài nguyên. Track chính 30 phút/20 record vẫn được giữ để liên tục với kết quả cũ. Model chỉ train trên một horizon không được xem là đã được kiểm chứng cho các horizon khác.
+
+**Điều kiện xem xét lại:** Cadence nguồn khác đáng kể một phút; xuất hiện policy nội suy continuous-time đã được kiểm chứng; dự án chọn context vận hành khác; hoặc model cần representation context khác. Mọi thay đổi thay thế protocol chính cần decision record mới.
+

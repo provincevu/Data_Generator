@@ -450,3 +450,27 @@ Each sample manifest record must include the schema version, split, context regi
 **Consequences:** Training code must expose a seed and epoch to the sampler. Evaluation code must consume only the persisted manifest. Changes to sampling policy or feature schema require a new manifest/schema version. Full-lifecycle evaluation can use a separate manifest policy without changing random-query training examples.
 
 **Reconsideration conditions:** Storage is sufficient and exhaustive pre-materialization becomes necessary, an online serving path requires a different record format, or a model needs a fixed serialized tensor artifact rather than index-based examples. Any change must preserve a reconstructible link to the canonical snapshot table.
+## IMPORTANT — Add context-window and relative-horizon sensitivity evaluation
+
+**Decision:** Add a separate sensitivity-evaluation track for context windows of 30, 40, 50, and 60 minutes. For a context window C minutes, the maximum context record count is C and the minimum is floor(0.8 * C), giving (24, 32, 40, 48) for (30, 40, 50, 60). Sample the actual context count uniformly between the minimum and the available maximum, retain the anchor and immediate predecessor, and preserve source gaps.
+
+For each context window, evaluate future horizons at ratios {25%, 50%, 75%, 100%, 150%, 200%, 300%}. Convert each ratio to integer minutes by flooring; for example, 25% of 30 minutes = 7 minutes. A horizon target contains all observed future snapshots in (t_anchor, t_anchor + horizon]; no interpolation or synthetic timestamps are introduced. If a trajectory has no observed future snapshot in a cell, that cell is omitted for that trajectory and its coverage is reported.
+
+This is an evaluation sensitivity track and does not replace the main causal protocol of at most 20 records in the previous 1,800 seconds.
+
+**Date:** 2026-10-10
+
+**Problem addressed:** The project needs to measure how context duration and requested prediction horizon affect feasibility before selecting the operating horizon for GAN or diffusion models. The existing main protocol fixes a 30-minute/20-record context, while the proposed sensitivity study intentionally tests longer contexts and proportional future windows.
+
+**Current system state:** The canonical snapshot table and sample-manifest pipeline preserve observed chronology and fixed feature dimension D=30. The current main sampler uses a maximum of 20 context records within 1,800 seconds. Baseline metrics show that long-horizon extrapolation is substantially harder than near-term prediction.
+
+**Business/project requirements:** Compare models under a controlled grid of context duration and future horizon; retain actual XJTU-SY observations; make missing future coverage visible; support dense and sparse context regimes; avoid changing the canonical trajectory or silently changing the main experiment.
+
+**Alternatives considered:** Replacing the main protocol with 60-minute contexts was rejected because it would break comparability with existing manifests and decisions. Requiring exactly one target at the horizon endpoint was rejected because XJTU-SY has missing measurements and no approved interpolation. Rounding fractional horizons to nearest minute was rejected because the project explicitly requires flooring. Dropping cells with insufficient future silently was rejected because coverage itself is an important feasibility result.
+
+**Rationale:** Scaling the record budget with context duration makes the sensitivity variable explicit: a 60-minute context can contain up to 60 one-minute observations. Flooring preserves a conservative, reproducible horizon. Using all observed targets inside the horizon measures sequence prediction without fabricating timestamps. Reporting per-cell coverage prevents a long-horizon result from being mistaken for a result on the full bearing population.
+
+**Consequences:** The evaluation grid produces separate manifests and metrics for each context/horizon/sparsity cell. Longer contexts and all-anchor evaluation can be computationally expensive. The main 30-minute/20-record track remains available for continuity. A model trained only on one horizon must not be interpreted as validated for all other horizons.
+
+**Reconsideration conditions:** The source cadence is shown to be materially different from one minute; a validated continuous-time interpolation policy is introduced; the project selects a different primary deployment context; or the model requires a different context representation. Any replacement of the main protocol requires a new decision record.
+
