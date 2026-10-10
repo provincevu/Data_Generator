@@ -1,4 +1,4 @@
-"""Baseline models and masked evaluation for causal XJTU-SY forecasting."""
+﻿"""Baseline models and masked evaluation for causal XJTU-SY forecasting."""
 
 from __future__ import annotations
 
@@ -102,8 +102,8 @@ class SmallMLPBaseline:
         *,
         random_state: int = 0,
         max_context: int = 20,
-        hidden_layer_sizes: tuple[int, ...] = (64,),
-        max_iter: int = 300,
+        hidden_layer_sizes: tuple[int, ...] = (32,),
+        max_iter: int = 100,
     ) -> None:
         self.random_state = random_state
         self.max_context = max_context
@@ -319,4 +319,5 @@ __all__ = [
     "horizon_label",
     "run_baseline_evaluation",
 ]
+
 
